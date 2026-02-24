@@ -1,44 +1,95 @@
-<div style="min-height:100vh; display:flex; justify-content:center; align-items:center;">
-  <div style="width:340px; border:1px solid #ddd; padding:20px; border-radius:8px;">
-    
-    <h2 style="text-align:center;">Registro</h2>
+<div style="min-height:100vh; display:flex; justify-content:center; align-items:center; padding: 24px;">
+  <div style="width: 520px; max-width: 100%;">
+    <h2>Registro</h2>
 
-    <label>
-      Nombre
-      <input
-        type="text"
-        placeholder="Tu nombre"
-        style="width:100%; padding:8px; margin-top:5px; margin-bottom:15px;"
-      />
-    </label>
+    <form [formGroup]="form" (ngSubmit)="register()" style="display:flex; flex-direction:column; gap: 14px;">
 
-    <label>
-      Correo
-      <input
-        type="email"
-        placeholder="correo@ejemplo.com"
-        style="width:100%; padding:8px; margin-top:5px; margin-bottom:15px;"
-      />
-    </label>
+      <div>
+        <label>Usuario</label>
+        <input pInputText type="text" formControlName="username" style="width:100%;" />
+        <p-message *ngIf="isInvalid('username')" severity="error" variant="simple" size="small">
+          Usuario obligatorio.
+        </p-message>
+      </div>
 
-    <label>
-      Contraseña
-      <input
-        type="password"
-        placeholder="********"
-        style="width:100%; padding:8px; margin-top:5px; margin-bottom:15px;"
-      />
-    </label>
+      <div>
+        <label>Email</label>
+        <input pInputText type="email" formControlName="email" style="width:100%;" />
+        <p-message *ngIf="isInvalid('email')" severity="error" variant="simple" size="small">
+          Email obligatorio y válido.
+        </p-message>
+      </div>
 
-    <button
-      style="width:100%; padding:10px; background:#388e3c; color:white; border:none; cursor:pointer;">
-      Registrarse
-    </button>
+      <div>
+        <label>Nombre completo</label>
+        <input pInputText type="text" formControlName="fullName" style="width:100%;" />
+        <p-message *ngIf="isInvalid('fullName')" severity="error" variant="simple" size="small">
+          Nombre obligatorio.
+        </p-message>
+      </div>
 
-    <p style="text-align:center; margin-top:15px;">
-      ¿Ya tienes cuenta?
-      <a routerLink="/login">Inicia sesión</a>
-    </p>
+      <div>
+        <label>Dirección</label>
+        <input pInputText type="text" formControlName="address" style="width:100%;" />
+        <p-message *ngIf="isInvalid('address')" severity="error" variant="simple" size="small">
+          Dirección obligatoria.
+        </p-message>
+      </div>
 
+      <div>
+        <label>Teléfono (solo números)</label>
+        <input pInputText pKeyFilter="int" type="text" formControlName="phone" style="width:100%;" />
+        <p-message *ngIf="isInvalid('phone')" severity="error" variant="simple" size="small">
+          Teléfono obligatorio (solo números).
+        </p-message>
+      </div>
+
+      <div>
+        <label>Fecha de nacimiento (mayor de edad)</label>
+        <p-datepicker formControlName="birthDate" [showIcon]="true" styleClass="w-full"></p-datepicker>
+        <p-message *ngIf="isInvalid('birthDate')" severity="error" variant="simple" size="small">
+          Debes ser mayor de edad.
+        </p-message>
+      </div>
+
+      <div>
+        <label>Contraseña</label>
+        <p-password
+          formControlName="password"
+          [toggleMask]="true"
+          [feedback]="true"
+          styleClass="w-full"
+        ></p-password>
+
+        <p-message *ngIf="isInvalid('password')" severity="error" variant="simple" size="small">
+          Mínimo 10 caracteres y al menos 1 símbolo: ! @ # $ % ^ & *
+        </p-message>
+      </div>
+
+      <div>
+        <label>Confirmar contraseña</label>
+        <p-password
+          formControlName="confirmPassword"
+          [toggleMask]="true"
+          [feedback]="false"
+          styleClass="w-full"
+        ></p-password>
+
+        <p-message *ngIf="isInvalid('confirmPassword')" severity="error" variant="simple" size="small">
+          Confirma tu contraseña.
+        </p-message>
+
+        <p-message *ngIf="hasMismatch()" severity="error" variant="simple" size="small">
+          Las contraseñas no coinciden.
+        </p-message>
+      </div>
+
+      <button pButton type="submit" label="Registrar" severity="success" [disabled]="form.invalid"></button>
+
+      <div style="display:flex; justify-content:space-between;">
+        <a routerLink="/">← Inicio</a>
+        <a routerLink="/login">Ir a Login</a>
+      </div>
+    </form>
   </div>
 </div>
