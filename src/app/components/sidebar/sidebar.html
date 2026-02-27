@@ -1,0 +1,19 @@
+<div class="sidebar">
+  <div class="brand">
+    <span class="title">Menú</span>
+  </div>
+
+  <div class="links">
+    <button pButton type="button" label="Home" icon="pi pi-home" routerLink="/home" class="w-full"></button>
+
+    <button
+      pButton
+      type="button"
+      label="Cerrar sesión"
+      icon="pi pi-sign-out"
+      severity="danger"
+      class="w-full"
+      (click)="logout()"
+    ></button>
+  </div>
+</div>

@@ -21,7 +21,6 @@ import { MessageService } from 'primeng/api';
   styleUrl: './login.scss',
 })
 export class Login {
-  //✅ Credenciales hardcodeadas
   private readonly VALID_EMAIL = 'admin@arp.com';
   private readonly VALID_PASSWORD = 'Admin@12345!';
 
@@ -43,33 +42,40 @@ export class Login {
   }
 
   login() {
-    this.submitted = true;
+  this.submitted = true;
 
-    if (this.form.invalid) {
-      this.msg.add({
-        severity: 'error',
-        summary: 'Error',
-        detail: 'Completa los campos correctamente.',
-      });
-      return;
-    }
-
-    const email = this.form.value.email!;
-    const password = this.form.value.password!;
-
-    if (email === this.VALID_EMAIL && password === this.VALID_PASSWORD) {
-      this.msg.add({
-        severity: 'success',
-        summary: 'Login correcto',
-        detail: 'Bienvenido',
-      });
-    } else {
-      this.msg.add({
-        severity: 'error',
-        summary: 'Credenciales inválidas',
-        detail: 'Correo o contraseña incorrectos.',
-      });
-    }
+  if (this.form.invalid) {
+    this.msg.add({
+      severity: 'error',
+      summary: 'Error',
+      detail: 'Completa los campos correctamente.',
+    });
+    return;
   }
+
+  const email = this.form.value.email!;
+  const password = this.form.value.password!;
+
+  if (email === this.VALID_EMAIL && password === this.VALID_PASSWORD) {
+    // ✅ hasta aquí ya pasó
+    localStorage.setItem('isLoggedIn', 'true');
+
+    this.msg.add({
+      severity: 'success',
+      summary: 'Login correcto',
+      detail: 'Bienvenido',
+    });
+
+    this.router.navigateByUrl('/home');
+  } else {
+    localStorage.removeItem('isLoggedIn'); // por si acaso
+
+    this.msg.add({
+      severity: 'error',
+      summary: 'Credenciales inválidas',
+      detail: 'Correo o contraseña incorrectos.',
+    });
+  }
+}
 
 }

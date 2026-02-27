@@ -1,1 +1,18 @@
 @import "primeicons/primeicons.css";
+input, textarea {
+  cursor: text;
+}
+/* Cursor normal en toda la app */
+html, body {
+  cursor: default;
+}
+
+/* Cursor de mano en botones/links */
+a, button, [role="button"] {
+  cursor: pointer;
+}
+
+/* Cursor de texto SOLO en campos de texto */
+input, textarea {
+  cursor: text;
+}
