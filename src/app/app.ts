@@ -26,6 +26,10 @@ export class AppComponent {
   }
 
   showTopNavbar(): boolean {
-    return !this.currentUrl.startsWith('/home');
-  }
+  return !(
+    this.currentUrl.startsWith('/home') ||
+    this.currentUrl.startsWith('/groups') ||
+    this.currentUrl.startsWith('/users')
+  );
+}
 }

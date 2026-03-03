@@ -1,3 +1,8 @@
+<aside class="logo">
+  <div class="brand">
+    <div class="logo">{{ appName }}</div>
+  </div>
+
 <div class="sidebar">
   <div class="brand">
     <span class="title">Menú</span>
@@ -6,6 +11,13 @@
   <div class="links">
     <button pButton type="button" label="Home" icon="pi pi-home" routerLink="/home" class="w-full"></button>
 
+    
+
+    <button pButton type="button" label="Groups" icon="pi pi-users" routerLink="/groups" class="w-full"></button>
+
+    <button pButton type="button" label="Users" icon="pi pi-user" routerLink="/users" class="w-full"></button>
+
+     <div class="bottom">
     <button
       pButton
       type="button"
@@ -16,4 +28,8 @@
       (click)="logout()"
     ></button>
   </div>
+
+      <div class="version">{{ version }}</div>
+
+  
 </div>

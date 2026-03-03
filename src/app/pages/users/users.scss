@@ -1,0 +1,29 @@
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.card {
+  max-width: 700px;
+}
+
+.row {
+  display: grid;
+  grid-template-columns: 160px 1fr;
+  gap: 10px;
+  padding: 6px 0;
+}
+
+.label {
+  font-weight: 700;
+  opacity: 0.85;
+}
+
+.value {
+  opacity: 0.9;
+}
+
+.placeholder {
+  opacity: 0.85;
+}

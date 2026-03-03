@@ -16,4 +16,9 @@ export class Sidebar {
     localStorage.clear();
     this.router.navigateByUrl('/login');
   }
+
+  appName = 'ARP';
+  version = 'v1.0.0';
+
+  
 }

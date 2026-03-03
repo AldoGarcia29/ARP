@@ -21,6 +21,18 @@
   flex-direction: column;
   gap: 10px;
 }
+.bottom {
+  margin-top: auto;  
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.version {
+  font-size: 12px;
+  opacity: 0.65;
+  text-align: center;
+}
 
 .w-full {
   width: 100%;

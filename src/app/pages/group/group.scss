@@ -1,0 +1,25 @@
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.sectionTitle {
+  margin: 10px 0 0;
+  opacity: 0.85;
+}
+
+.card {
+  max-width: 520px;
+}
+
+.totalBox {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 18px;
+}
+
+.advancedCard {
+  max-width: 900px; /* más grande */
+}
