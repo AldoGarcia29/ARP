@@ -1,15 +1,175 @@
+<p-toast></p-toast>
+<p-confirmDialog></p-confirmDialog>
+
 <div class="page">
-  <h2>Group</h2>
+  <div class="pageHeader">
+    <h2>Groups</h2>
+
+    <button
+      pButton
+      type="button"
+      label="Nuevo Group"
+      icon="pi pi-plus"
+      (click)="openNew()"
+    ></button>
+  </div>
 
   <p-card header="Total" class="card">
     <div class="totalBox">
+      <span>Total de grupos:</span>
       <p-tag [value]="total.toString()" severity="info"></p-tag>
     </div>
   </p-card>
 
-  <h3 class="sectionTitle">Advanced</h3>
+  <p-card header="Listado" class="card">
+    <p-table
+      [value]="groups"
+      [paginator]="true"
+      [rows]="5"
+      [rowsPerPageOptions]="[5,10,20]"
+      responsiveLayout="scroll"
+    >
+      <ng-template pTemplate="header">
+        <tr>
+          <th>Nombre</th>
+          <th>Nivel</th>
+          <th>Autor</th>
+          <th>Integrantes</th>
+          <th>Tickets</th>
+          <th>Descripción</th>
 
-  <p-card header="Advanced Card" class="card advancedCard">
+          <th style="width: 200px">Acciones</th>
+        </tr>
+      </ng-template>
 
+      <ng-template pTemplate="body" let-g>
+        <tr>
+          <td>{{ g.name }}</td>
+
+          <td>
+            <p-tag [value]="g.level" [severity]="levelSeverity(g.level)"></p-tag>
+          </td>
+
+          <td>{{ g.author }}</td>
+          <td>{{ g.members }}</td>
+          <td>{{ g.tickets }}</td>
+          <td class="desc">
+  {{ g.description }}
+</td>
+
+          <td class="actions">
+            <button
+              pButton
+              type="button"
+              icon="pi pi-pencil"
+              label="Editar"
+              severity="secondary"
+              (click)="editGroup(g)"
+            ></button>
+
+            <button
+              pButton
+              type="button"
+              icon="pi pi-trash"
+              label="Borrar"
+              severity="danger"
+              (click)="deleteGroup(g)"
+            ></button>
+          </td>
+        </tr>
+      </ng-template>
+
+      <ng-template pTemplate="emptymessage">
+        <tr>
+          <td colspan="6">No hay grupos aún.</td>
+        </tr>
+      </ng-template>
+    </p-table>
   </p-card>
+
+  <p-dialog
+    [(visible)]="dialogVisible"
+    [modal]="true"
+    [draggable]="false"
+    [resizable]="false"
+    [style]="{ width: '720px', maxWidth: '95vw' }"
+    [header]="editingId === null ? 'Nuevo Group' : 'Editar Group'"
+    (onHide)="onDialogHide()"
+  >
+    <form [formGroup]="form" class="formGrid">
+      <div class="field">
+        <label>Nivel</label>
+        <p-select
+          [options]="levels"
+          optionLabel="label"
+          optionValue="value"
+          formControlName="level"
+          placeholder="Selecciona nivel"
+        ></p-select>
+        <p-message *ngIf="isInvalid('level')" severity="error" text="Requerido"></p-message>
+      </div>
+
+      <div class="field">
+        <label>Autor</label>
+        <input pInputText formControlName="author" placeholder="Ej: Aldo Garcia" />
+        <p-message *ngIf="isInvalid('author')" severity="error" text="Requerido"></p-message>
+      </div>
+
+      <div class="field full">
+        <label>Nombre</label>
+        <input pInputText formControlName="name" placeholder="Ej: ARP Starter" />
+        <p-message *ngIf="isInvalid('name')" severity="error" text="Requerido"></p-message>
+      </div>
+
+      <div class="field">
+        <label>Integrantes</label>
+        <p-inputNumber formControlName="members" [min]="1"></p-inputNumber>
+        <p-message *ngIf="isInvalid('members')" severity="error" text="Mínimo 1"></p-message>
+      </div>
+
+      <div class="field">
+        <label>Tickets</label>
+        <p-inputNumber formControlName="tickets" [min]="0"></p-inputNumber>
+        <p-message *ngIf="isInvalid('tickets')" severity="error" text="Mínimo 0"></p-message>
+      </div>
+
+      <div class="field full">
+        <label>Descripción</label>
+
+        <!-- ✅ sin módulo extra: se ve como PrimeNG por la clase -->
+        <textarea
+          class="p-inputtext p-component"
+          rows="4"
+          formControlName="description"
+          placeholder="Describe el group..."
+        ></textarea>
+
+        <p-message
+          *ngIf="isInvalid('description')"
+          severity="error"
+          text="Requerido (mínimo 10 caracteres)"
+        ></p-message>
+      </div>
+    </form>
+
+    <ng-template pTemplate="footer">
+      <button
+        pButton
+        type="button"
+        label="Cancelar"
+        icon="pi pi-times"
+        severity="secondary"
+        (click)="dialogVisible = false"
+      ></button>
+
+      <button
+        pButton
+        type="button"
+        label="Guardar"
+        icon="pi pi-save"
+        severity="success"
+        (click)="save()"
+      ></button>
+    </ng-template>
+  </p-dialog>
 </div>

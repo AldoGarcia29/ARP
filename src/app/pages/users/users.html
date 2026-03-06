@@ -1,39 +1,99 @@
+<p-toast></p-toast>
+
 <div class="page">
   <h2>User</h2>
 
   <p-card header="Profile Data" class="card">
-    <div class="row">
-      <span class="label">Usuario:</span>
-      <span class="value">{{ profile.username }}</span>
-    </div>
+    <!-- BOTONES RUD -->
+    <div class="actions">
+      <button
+        pButton
+        type="button"
+        label="Editar"
+        icon="pi pi-pencil"
+        *ngIf="!editing"
+        (click)="startEdit()"
+      ></button>
 
-    <div class="row">
-      <span class="label">Email:</span>
-      <span class="value">{{ profile.email }}</span>
-    </div>
+      <button
+        pButton
+        type="button"
+        label="Guardar"
+        icon="pi pi-save"
+        severity="success"
+        *ngIf="editing"
+        (click)="saveChanges()"
+      ></button>
 
-    <div class="row">
-      <span class="label">Nombre completo:</span>
-      <span class="value">{{ profile.fullName }}</span>
-    </div>
+      <button
+        pButton
+        type="button"
+        label="Cancelar"
+        icon="pi pi-times"
+        severity="secondary"
+        *ngIf="editing"
+        (click)="cancelEdit()"
+      ></button>
 
-    <div class="row">
-      <span class="label">Dirección:</span>
-      <span class="value">{{ profile.address }}</span>
-    </div>
-
-    <div class="row">
-      <span class="label">Teléfono:</span>
-      <span class="value">{{ profile.phone }}</span>
-    </div>
-
-    <div class="row">
-      <span class="label">Fecha nacimiento:</span>
-      <span class="value">{{ profile.birthDate }}</span>
+      <button
+        pButton
+        type="button"
+        label="Eliminar"
+        icon="pi pi-trash"
+        severity="danger"
+        (click)="deleteProfile()"
+      ></button>
     </div>
 
     <p-divider></p-divider>
 
+    <!-- FORM (R y U) -->
+    <form [formGroup]="form" class="grid">
+      <div class="field">
+        <label>Usuario</label>
+        <input pInputText formControlName="username" />
+        <p-message *ngIf="isInvalid('username')" severity="error" text="Requerido"></p-message>
+      </div>
 
+      <div class="field">
+        <label>Email</label>
+        <input pInputText formControlName="email" />
+        <p-message *ngIf="isInvalid('email')" severity="error" text="Email inválido"></p-message>
+      </div>
+
+      <div class="field full">
+        <label>Contraseña</label>
+        <p-password
+          formControlName="password"
+          [toggleMask]="true"
+          [feedback]="false"
+        ></p-password>
+        <p-message *ngIf="isInvalid('password')" severity="error" text="Requerido"></p-message>
+      </div>
+
+      <div class="field">
+        <label>Nombre completo</label>
+        <input pInputText formControlName="fullName" />
+        <p-message *ngIf="isInvalid('fullName')" severity="error" text="Requerido"></p-message>
+      </div>
+
+      <div class="field">
+        <label>Dirección</label>
+        <input pInputText formControlName="address" />
+        <p-message *ngIf="isInvalid('address')" severity="error" text="Requerido"></p-message>
+      </div>
+
+      <div class="field">
+        <label>Teléfono</label>
+        <input pInputText formControlName="phone" />
+        <p-message *ngIf="isInvalid('phone')" severity="error" text="Solo números"></p-message>
+      </div>
+
+      <div class="field">
+        <label>Fecha nacimiento</label>
+        <input pInputText formControlName="birthDate" />
+        <p-message *ngIf="isInvalid('birthDate')" severity="error" text="Requerido"></p-message>
+      </div>
+    </form>
   </p-card>
 </div>
