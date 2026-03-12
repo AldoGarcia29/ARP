@@ -1,0 +1,656 @@
+<p-toast></p-toast>
+
+<div class="page">
+  <div class="top-bar">
+    <div>
+      <h2>Vista Grupo</h2>
+      <p *ngIf="selectedGroup">
+        <strong>Grupo:</strong> {{ selectedGroup.name }}
+      </p>
+    </div>
+
+    <div class="top-actions">
+      <button pButton type="button" label="Nuevo Ticket" icon="pi pi-plus" severity="success"
+        (click)="handleNewTicket()"></button>
+
+    </div>
+  </div>
+
+  <div class="group-summary">
+  <div class="summary-card">
+    <span class="summary-label">Total</span>
+    <span class="summary-value">{{ totalTicketsCount }}</span>
+  </div>
+
+  <div class="summary-card">
+    <span class="summary-label">Pendientes</span>
+    <span class="summary-value">{{ pendingCount }}</span>
+  </div>
+
+  <div class="summary-card">
+    <span class="summary-label">En progreso</span>
+    <span class="summary-value">{{ inProgressCount }}</span>
+  </div>
+
+  <div class="summary-card">
+    <span class="summary-label">Hechos</span>
+    <span class="summary-value">{{ doneCount }}</span>
+  </div>
+
+  <div class="summary-card">
+    <span class="summary-label">Bloqueados</span>
+    <span class="summary-value">{{ reviewCount }}</span>
+  </div>
+</div>
+
+  <div class="group-info" *ngIf="selectedGroup">
+    <p><strong>Nivel:</strong> {{ selectedGroup.level }}</p>
+    <p><strong>Autor:</strong> {{ selectedGroup.author }}</p>
+    <p><strong>Descripción:</strong> {{ selectedGroup.description }}</p>
+  </div>
+
+  <div class="view-switch">
+    <p-selectButton [options]="viewOptions" [(ngModel)]="viewMode" optionLabel="label" optionValue="value">
+    </p-selectButton>
+  </div>
+
+  <div class="tickets-section">
+    <h3>Tickets del grupo</h3>
+
+    <div *ngIf="ticketsByGroup.length === 0" class="empty-state">
+      No hay tickets para este grupo.
+    </div>
+
+    <div *ngIf="viewMode === 'list'" class="filters-bar">
+      <div class="filter-item">
+        <label>Estado</label>
+        <p-select [options]="statusOptions" optionLabel="label" optionValue="value" [(ngModel)]="statusFilter"
+          placeholder="Todos"></p-select>
+      </div>
+
+      <div class="filter-item">
+        <label>Prioridad</label>
+        <p-select [options]="priorityOptions" optionLabel="label" optionValue="value" [(ngModel)]="priorityFilter"
+          placeholder="Todas"></p-select>
+      </div>
+
+      <div class="filter-item">
+        <label>Fecha creación</label>
+        <input pInputText type="date" [(ngModel)]="createdAtFilter" />
+      </div>
+
+      <div class="filter-item">
+        <label>Fecha límite</label>
+        <input pInputText type="date" [(ngModel)]="dueDateFilter" />
+      </div>
+
+      <div class="filter-item">
+        <label>Ordenar por</label>
+        <p-select [options]="sortOptions" optionLabel="label" optionValue="value" [(ngModel)]="sortField"
+          placeholder="Sin ordenar"></p-select>
+      </div>
+
+      <div class="filter-item">
+        <label>Orden</label>
+        <p-select [options]="orderOptions" optionLabel="label" optionValue="value" [(ngModel)]="sortOrder"></p-select>
+      </div>
+
+      <div class="filter-actions">
+        <button pButton type="button" label="Limpiar" icon="pi pi-filter-slash" severity="secondary"
+          (click)="clearFilters()"></button>
+      </div>
+    </div>
+
+    <div *ngIf="viewMode === 'list' && filteredTicketsByGroup.length > 0" class="tickets-grid">
+  <div class="ticket-card" *ngFor="let ticket of filteredTicketsByGroup">
+    <div class="ticket-card-header">
+      <div>
+        <h4>{{ ticket.title }}</h4>
+        <p class="ticket-description">{{ ticket.description }}</p>
+      </div>
+
+      <div class="ticket-badges">
+        <span class="detail-badge status">{{ ticket.status }}</span>
+        <span class="detail-badge priority" [ngClass]="ticket.priority.toLowerCase()">
+          {{ ticket.priority }}
+        </span>
+      </div>
+    </div>
+
+    
+    <div class="ticket-info-grid">
+
+      <div class="ticket-info-item">
+  <span class="ticket-label">Creado por</span>
+  <span>{{ ticket.createdBy }}</span>
+</div>
+
+      <div class="ticket-info-item">
+        <span class="ticket-label">Asignado a</span>
+        <span>{{ ticket.assignedTo }}</span>
+      </div>
+
+      <div class="ticket-info-item">
+        <span class="ticket-label">Fecha de creación</span>
+        <span>{{ ticket.createdAt }}</span>
+      </div>
+
+      <div class="ticket-info-item">
+        <span class="ticket-label">Fecha límite</span>
+        <span>{{ ticket.dueDate }}</span>
+      </div>
+    </div>
+
+    <div class="comments-block">
+      <strong>Comentarios</strong>
+      <ul *ngIf="ticket.comments.length > 0; else noCommentsList">
+        <li *ngFor="let comment of ticket.comments">
+          {{ comment }}
+        </li>
+      </ul>
+
+      <ng-template #noCommentsList>
+        <p class="muted-text">Sin comentarios.</p>
+      </ng-template>
+    </div>
+
+    <div class="history-block">
+      <strong>Historial reciente</strong>
+      <ul *ngIf="ticket.history.length > 0; else noHistoryList">
+        <li *ngFor="let item of ticket.history | slice:0:3">
+          <span class="history-date">{{ item.date }}</span>
+          <span class="history-text">{{ item.action }} - {{ item.detail }}</span>
+        </li>
+      </ul>
+
+      <ng-template #noHistoryList>
+        <p class="muted-text">Sin historial.</p>
+      </ng-template>
+    </div>
+
+   
+    <div class="ticket-actions">
+  <button
+    *ngIf="canViewTicketDetail"
+    pButton
+    type="button"
+    label="Ticket Detail"
+    icon="pi pi-eye"
+    severity="info"
+    (click)="handleTicketDetail(ticket)"
+  ></button>
+</div>
+  </div>
+</div>
+
+   <div *ngIf="viewMode === 'kanban' && ticketsByGroup.length > 0" class="kanban-board">
+
+  <!-- PENDIENTE -->
+  <div class="kanban-column">
+    <div class="kanban-header">
+      <h4>Pendiente</h4>
+      <span class="kanban-count">{{ pendingCount }}</span>
+    </div>
+
+    <div
+      class="kanban-dropzone"
+      cdkDropList
+      id="pendienteList"
+      [cdkDropListData]="pendingTickets"
+      [cdkDropListConnectedTo]="['progressList', 'reviewList', 'doneList']"
+      (cdkDropListDropped)="dropTicket($event, 'Pendiente')"
+    >
+      <div class="kanban-empty" *ngIf="pendingTickets.length === 0">
+        Sin tickets
+      </div>
+
+      <div
+        class="kanban-card"
+        *ngFor="let ticket of pendingTickets"
+        cdkDrag
+      >
+        <div class="kanban-card-top">
+          <h5>{{ ticket.title }}</h5>
+          <span class="priority-chip" [ngClass]="ticket.priority.toLowerCase()">
+            {{ ticket.priority }}
+          </span>
+        </div>
+
+        <p class="kanban-description">{{ ticket.description }}</p>
+
+        <div class="kanban-meta">
+          <small><strong>Asignado:</strong> {{ ticket.assignedTo }}</small>
+          <small><strong>Creación:</strong> {{ ticket.createdAt }}</small>
+          <small><strong>Límite:</strong> {{ ticket.dueDate }}</small>
+        </div>
+
+        <div class="ticket-actions">
+          <button
+            *ngIf="canEditTickets"
+            pButton
+            type="button"
+            icon="pi pi-pencil"
+            severity="secondary"
+            (click)="handleEditTicket(ticket)"
+          ></button>
+
+          <button
+            *ngIf="canViewTicketDetail"
+            pButton
+            type="button"
+            icon="pi pi-eye"
+            severity="info"
+            (click)="handleTicketDetail(ticket)"
+          ></button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- EN PROGRESO -->
+  <div class="kanban-column">
+    <div class="kanban-header">
+      <h4>En progreso</h4>
+      <span class="kanban-count">{{ inProgressCount }}</span>
+    </div>
+
+    <div
+      class="kanban-dropzone"
+      cdkDropList
+      id="progressList"
+      [cdkDropListData]="inProgressTickets"
+      [cdkDropListConnectedTo]="['pendienteList', 'reviewList', 'doneList']"
+      (cdkDropListDropped)="dropTicket($event, 'En progreso')"
+    >
+      <div class="kanban-empty" *ngIf="inProgressTickets.length === 0">
+        Sin tickets
+      </div>
+
+      <div
+        class="kanban-card"
+        *ngFor="let ticket of inProgressTickets"
+        cdkDrag
+      >
+        <div class="kanban-card-top">
+          <h5>{{ ticket.title }}</h5>
+          <span class="priority-chip" [ngClass]="ticket.priority.toLowerCase()">
+            {{ ticket.priority }}
+          </span>
+        </div>
+
+        <p class="kanban-description">{{ ticket.description }}</p>
+
+        <div class="kanban-meta">
+          <small><strong>Asignado:</strong> {{ ticket.assignedTo }}</small>
+          <small><strong>Creación:</strong> {{ ticket.createdAt }}</small>
+          <small><strong>Límite:</strong> {{ ticket.dueDate }}</small>
+        </div>
+
+        <div class="ticket-actions">
+          <button
+            *ngIf="canEditTickets"
+            pButton
+            type="button"
+            icon="pi pi-pencil"
+            severity="secondary"
+            (click)="handleEditTicket(ticket)"
+          ></button>
+
+          <button
+            *ngIf="canViewTicketDetail"
+            pButton
+            type="button"
+            icon="pi pi-eye"
+            severity="info"
+            (click)="handleTicketDetail(ticket)"
+          ></button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- REVISION -->
+  <div class="kanban-column">
+    <div class="kanban-header">
+      <h4>Revisión</h4>
+      <span class="kanban-count">{{ reviewCount }}</span>
+    </div>
+
+    <div
+      class="kanban-dropzone"
+      cdkDropList
+      id="reviewList"
+      [cdkDropListData]="reviewTickets"
+      [cdkDropListConnectedTo]="['pendienteList', 'progressList', 'doneList']"
+      (cdkDropListDropped)="dropTicket($event, 'Revisión')"
+    >
+      <div class="kanban-empty" *ngIf="reviewTickets.length === 0">
+        Sin tickets
+      </div>
+
+      <div
+        class="kanban-card"
+        *ngFor="let ticket of reviewTickets"
+        cdkDrag
+      >
+        <div class="kanban-card-top">
+          <h5>{{ ticket.title }}</h5>
+          <span class="priority-chip" [ngClass]="ticket.priority.toLowerCase()">
+            {{ ticket.priority }}
+          </span>
+        </div>
+
+        <p class="kanban-description">{{ ticket.description }}</p>
+
+        <div class="kanban-meta">
+          <small><strong>Asignado:</strong> {{ ticket.assignedTo }}</small>
+          <small><strong>Creación:</strong> {{ ticket.createdAt }}</small>
+          <small><strong>Límite:</strong> {{ ticket.dueDate }}</small>
+        </div>
+
+        <div class="ticket-actions">
+          <button
+            *ngIf="canEditTickets"
+            pButton
+            type="button"
+            icon="pi pi-pencil"
+            severity="secondary"
+            (click)="handleEditTicket(ticket)"
+          ></button>
+
+          <button
+            *ngIf="canViewTicketDetail"
+            pButton
+            type="button"
+            icon="pi pi-eye"
+            severity="info"
+            (click)="handleTicketDetail(ticket)"
+          ></button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- FINALIZADO -->
+  <div class="kanban-column">
+    <div class="kanban-header">
+      <h4>Finalizado</h4>
+      <span class="kanban-count">{{ doneCount }}</span>
+    </div>
+
+    <div
+      class="kanban-dropzone"
+      cdkDropList
+      id="doneList"
+      [cdkDropListData]="doneTickets"
+      [cdkDropListConnectedTo]="['pendienteList', 'progressList', 'reviewList']"
+      (cdkDropListDropped)="dropTicket($event, 'Finalizado')"
+    >
+      <div class="kanban-empty" *ngIf="doneTickets.length === 0">
+        Sin tickets
+      </div>
+
+      <div
+        class="kanban-card"
+        *ngFor="let ticket of doneTickets"
+        cdkDrag
+      >
+        <div class="kanban-card-top">
+          <h5>{{ ticket.title }}</h5>
+          <span class="priority-chip" [ngClass]="ticket.priority.toLowerCase()">
+            {{ ticket.priority }}
+          </span>
+        </div>
+
+        <p class="kanban-description">{{ ticket.description }}</p>
+
+        <div class="kanban-meta">
+          <small><strong>Asignado:</strong> {{ ticket.assignedTo }}</small>
+          <small><strong>Creación:</strong> {{ ticket.createdAt }}</small>
+          <small><strong>Límite:</strong> {{ ticket.dueDate }}</small>
+        </div>
+
+        <div class="ticket-actions">
+          <button
+            *ngIf="canEditTickets"
+            pButton
+            type="button"
+            icon="pi pi-pencil"
+            severity="secondary"
+            (click)="handleEditTicket(ticket)"
+          ></button>
+
+          <button
+            *ngIf="canViewTicketDetail"
+            pButton
+            type="button"
+            icon="pi pi-eye"
+            severity="info"
+            (click)="handleTicketDetail(ticket)"
+          ></button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+  <p-dialog [(visible)]="dialogVisible" [modal]="true" [draggable]="false" [resizable]="false"
+    [style]="{ width: '720px', maxWidth: '95vw' }"
+    [header]="editingTicketId === null ? 'Nuevo Ticket' : 'Editar Ticket'">
+    <form [formGroup]="ticketForm" class="form-grid">
+      <div class="field full">
+        <label>Título</label>
+        <input pInputText formControlName="title" placeholder="Ej: Corregir login" />
+        <p-message *ngIf="isInvalid('title')" severity="error" text="Requerido"></p-message>
+      </div>
+
+      <div class="field full">
+        <label>Descripción</label>
+        <textarea class="p-inputtext p-component" rows="4" formControlName="description"
+          placeholder="Describe el ticket..."></textarea>
+        <p-message *ngIf="isInvalid('description')" severity="error"
+          text="Requerido (mínimo 10 caracteres)"></p-message>
+      </div>
+
+      <div class="field">
+        <label>Estado</label>
+        <p-select [options]="statusOptions" optionLabel="label" optionValue="value" formControlName="status"
+          placeholder="Selecciona estado"></p-select>
+        <p-message *ngIf="isInvalid('status')" severity="error" text="Requerido"></p-message>
+      </div>
+
+      <div class="field">
+        <label>Asignado a</label>
+        <p-select [options]="userOptions" optionLabel="label" optionValue="value" formControlName="assignedTo"
+          placeholder="Selecciona usuario"></p-select>
+        <p-message *ngIf="isInvalid('assignedTo')" severity="error" text="Requerido"></p-message>
+      </div>
+
+      <div class="field">
+        <label>Prioridad</label>
+        <p-select [options]="priorityOptions" optionLabel="label" optionValue="value" formControlName="priority"
+          placeholder="Selecciona prioridad"></p-select>
+        <p-message *ngIf="isInvalid('priority')" severity="error" text="Requerido"></p-message>
+      </div>
+
+      <div class="field">
+        <label>Fecha de creación</label>
+        <input pInputText [value]="currentCreatedAt" readonly />
+      </div>
+
+      <div class="field">
+        <label>Fecha límite</label>
+        <input pInputText type="date" formControlName="dueDate" />
+        <p-message *ngIf="isInvalid('dueDate')" severity="error" text="Requerido"></p-message>
+      </div>
+
+      <div class="field full">
+        <label>Comentario inicial</label>
+        <textarea class="p-inputtext p-component" rows="3" formControlName="comment"
+          placeholder="Comentario opcional..."></textarea>
+      </div>
+    </form>
+
+    <ng-template pTemplate="footer">
+      <button pButton type="button" label="Cancelar" icon="pi pi-times" severity="secondary"
+        (click)="dialogVisible = false"></button>
+
+      <button pButton type="button" label="Guardar" icon="pi pi-save" severity="success"
+        (click)="saveTicket()"></button>
+    </ng-template>
+  </p-dialog>
+</div>
+
+<p-dialog
+  [(visible)]="detailDialogVisible"
+  [modal]="true"
+  [draggable]="false"
+  [resizable]="false"
+  [style]="{ width: '860px', maxWidth: '95vw' }"
+  header="Ticket Detail"
+>
+  <form *ngIf="selectedTicket" [formGroup]="ticketForm" class="form-grid">
+    <div class="field full">
+      <label>Título</label>
+      <input
+        pInputText
+        formControlName="title"
+        [readonly]="!canEditAllTicketFields"
+      />
+    </div>
+
+    <div class="field full">
+      <label>Descripción</label>
+      <textarea
+        class="p-inputtext p-component"
+        rows="4"
+        formControlName="description"
+        [readonly]="!canEditAllTicketFields"
+      ></textarea>
+    </div>
+
+    <div class="field">
+      <label>Estado</label>
+      <p-select
+        [options]="statusOptions"
+        optionLabel="label"
+        optionValue="value"
+        formControlName="status"
+      ></p-select>
+    </div>
+
+    <div class="field">
+      <label>Asignado a</label>
+      <p-select
+        [options]="userOptions"
+        optionLabel="label"
+        optionValue="value"
+        formControlName="assignedTo"
+        [disabled]="!canEditAllTicketFields"
+      ></p-select>
+    </div>
+
+    <div class="field">
+      <label>Prioridad</label>
+      <p-select
+        [options]="priorityOptions"
+        optionLabel="label"
+        optionValue="value"
+        formControlName="priority"
+        [disabled]="!canEditAllTicketFields"
+      ></p-select>
+    </div>
+
+    <div class="field">
+      <label>Fecha de creación</label>
+      <input pInputText [value]="selectedTicket.createdAt" readonly />
+    </div>
+
+    <div class="field">
+      <label>Fecha límite</label>
+      <input
+        pInputText
+        type="date"
+        formControlName="dueDate"
+        [readonly]="!canEditAllTicketFields"
+      />
+    </div>
+
+    <div class="field">
+      <label>Creado por</label>
+      <input pInputText [value]="selectedTicket.createdBy" readonly />
+    </div>
+
+    <div class="field">
+      <label>Grupo</label>
+      <input pInputText [value]="selectedGroup?.name || ''" readonly />
+    </div>
+
+    <div class="field full">
+      <label>Agregar comentario</label>
+      <textarea
+        class="p-inputtext p-component"
+        rows="3"
+        formControlName="comment"
+        placeholder="Escribe un comentario..."
+      ></textarea>
+    </div>
+
+    <div class="detail-block full">
+      <label>Comentarios</label>
+      <div class="detail-value">
+        <ul class="comments-list" *ngIf="selectedTicket.comments.length > 0; else noComments">
+          <li *ngFor="let comment of selectedTicket.comments">
+            {{ comment }}
+          </li>
+        </ul>
+
+        <ng-template #noComments>
+          <span>Sin comentarios.</span>
+        </ng-template>
+      </div>
+    </div>
+
+    <div class="detail-block full">
+      <label>Historial de cambios</label>
+
+      <div class="timeline-box full" *ngIf="selectedTicket.history.length > 0; else noHistory">
+        <p-timeline [value]="selectedTicket.history" align="left">
+          <ng-template pTemplate="content" let-item>
+            <div class="timeline-content">
+              <div class="timeline-date">{{ item.date }}</div>
+              <div class="timeline-action">{{ item.action }}</div>
+              <div class="timeline-detail">{{ item.detail }}</div>
+              <div class="timeline-user">por {{ item.user }}</div>
+            </div>
+          </ng-template>
+        </p-timeline>
+      </div>
+
+      <ng-template #noHistory>
+        <div class="detail-value">Sin historial.</div>
+      </ng-template>
+    </div>
+  </form>
+
+  <ng-template pTemplate="footer">
+    <button
+      pButton
+      type="button"
+      label="Cerrar"
+      icon="pi pi-times"
+      severity="secondary"
+      (click)="detailDialogVisible = false"
+    ></button>
+
+    <button
+      pButton
+      type="button"
+      label="Guardar cambios"
+      icon="pi pi-save"
+      severity="success"
+      (click)="saveTicketDetail()"
+    ></button>
+  </ng-template>
+</p-dialog>

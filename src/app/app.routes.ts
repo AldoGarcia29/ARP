@@ -7,6 +7,9 @@ import { Home } from './pages/home/home';
 import { MainLayout } from './Layout/main-layout/main-layout';
 import { Group } from './pages/group/group';
 import { Users } from './pages/users/users';
+import { GroupView } from './pages/group-view/group-view';
+import { UserManagement } from './pages/user-management/user-management';
+
 export const routes: Routes = [
   { path: '', component: Landing},
   { path: 'login', component: Login },
@@ -18,6 +21,9 @@ export const routes: Routes = [
       { path: 'home', component: Home },
       { path: 'groups', component: Group },
       { path: 'users', component: Users },
+      { path: 'group-view/:id', component: GroupView },
+      { path: 'user-management', component: UserManagement },
+
       { path: '', redirectTo: 'home', pathMatch: 'full' },
     ],
   },

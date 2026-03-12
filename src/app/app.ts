@@ -29,7 +29,8 @@ export class AppComponent {
   return !(
     this.currentUrl.startsWith('/home') ||
     this.currentUrl.startsWith('/groups') ||
-    this.currentUrl.startsWith('/users')
+    this.currentUrl.startsWith('/users') ||
+    this.currentUrl.startsWith('/group-view')
   );
 }
 }

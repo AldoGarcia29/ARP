@@ -1,17 +1,16 @@
 <p-toast></p-toast>
 
 <div class="page">
-  <h2>User</h2>
+  <h2>Perfil</h2>
 
-  <p-card header="Profile Data" class="card">
-    <!-- BOTONES RUD -->
+  <p-card header="Datos de perfil" class="card">
     <div class="actions">
       <button
         pButton
         type="button"
         label="Editar"
         icon="pi pi-pencil"
-        *ngIf="!editing"
+        *ngIf="!editing && currentUser"
         (click)="startEdit()"
       ></button>
 
@@ -41,59 +40,154 @@
         label="Eliminar"
         icon="pi pi-trash"
         severity="danger"
+        *ngIf="currentUser"
         (click)="deleteProfile()"
       ></button>
     </div>
 
     <p-divider></p-divider>
 
-    <!-- FORM (R y U) -->
-    <form [formGroup]="form" class="grid">
-      <div class="field">
-        <label>Usuario</label>
-        <input pInputText formControlName="username" />
-        <p-message *ngIf="isInvalid('username')" severity="error" text="Requerido"></p-message>
+    <div *ngIf="currentUser; else noUserLogged">
+      <form [formGroup]="form" class="grid">
+        <div class="field">
+          <label>Usuario</label>
+          <input pInputText formControlName="username" />
+          <p-message *ngIf="isInvalid('username')" severity="error" text="Requerido"></p-message>
+        </div>
+
+        <div class="field">
+          <label>Email</label>
+          <input pInputText formControlName="email" />
+          <p-message *ngIf="isInvalid('email')" severity="error" text="Email inválido"></p-message>
+        </div>
+
+        <div class="field full">
+          <label>Contraseña</label>
+          <p-password
+            formControlName="password"
+            [toggleMask]="true"
+            [feedback]="false"
+          ></p-password>
+          <p-message *ngIf="isInvalid('password')" severity="error" text="Requerido"></p-message>
+        </div>
+
+        <div class="field">
+          <label>Nombre completo</label>
+          <input pInputText formControlName="fullName" />
+          <p-message *ngIf="isInvalid('fullName')" severity="error" text="Requerido"></p-message>
+        </div>
+
+        <div class="field">
+          <label>Dirección</label>
+          <input pInputText formControlName="address" />
+          <p-message *ngIf="isInvalid('address')" severity="error" text="Requerido"></p-message>
+        </div>
+
+        <div class="field">
+          <label>Teléfono</label>
+          <input pInputText formControlName="phone" />
+          <p-message *ngIf="isInvalid('phone')" severity="error" text="Solo números"></p-message>
+        </div>
+
+        <div class="field">
+          <label>Fecha nacimiento</label>
+          <input pInputText formControlName="birthDate" />
+          <p-message *ngIf="isInvalid('birthDate')" severity="error" text="Requerido"></p-message>
+        </div>
+      </form>
+
+      <div class="summary-section">
+        <h3>Resumen de tickets</h3>
+
+        <div class="summary-grid">
+          <div class="summary-card">
+            <span class="summary-label">Total asignados</span>
+            <span class="summary-value">{{ totalAssignedTicketsCount }}</span>
+          </div>
+
+          <div class="summary-card">
+            <span class="summary-label">Pendientes</span>
+            <span class="summary-value">{{ openTicketsCount }}</span>
+          </div>
+
+          <div class="summary-card">
+            <span class="summary-label">En progreso</span>
+            <span class="summary-value">{{ inProgressTicketsCount }}</span>
+          </div>
+
+          <div class="summary-card">
+            <span class="summary-label">Revisión</span>
+            <span class="summary-value">{{ reviewTicketsCount }}</span>
+          </div>
+
+          <div class="summary-card">
+            <span class="summary-label">Finalizados</span>
+            <span class="summary-value">{{ doneTicketsCount }}</span>
+          </div>
+        </div>
       </div>
 
-      <div class="field">
-        <label>Email</label>
-        <input pInputText formControlName="email" />
-        <p-message *ngIf="isInvalid('email')" severity="error" text="Email inválido"></p-message>
-      </div>
+      <div class="tickets-section">
+        <h3>Tickets asignados a {{ currentUser.fullName }}</h3>
 
-      <div class="field full">
-        <label>Contraseña</label>
-        <p-password
-          formControlName="password"
-          [toggleMask]="true"
-          [feedback]="false"
-        ></p-password>
-        <p-message *ngIf="isInvalid('password')" severity="error" text="Requerido"></p-message>
-      </div>
+        <div *ngIf="assignedTickets.length === 0" class="empty-state">
+          No hay tickets asignados a este usuario.
+        </div>
 
-      <div class="field">
-        <label>Nombre completo</label>
-        <input pInputText formControlName="fullName" />
-        <p-message *ngIf="isInvalid('fullName')" severity="error" text="Requerido"></p-message>
-      </div>
+        <div *ngIf="assignedTickets.length > 0" class="tickets-grid">
+          <div class="ticket-card" *ngFor="let ticket of assignedTickets">
+            <div class="ticket-card-header">
+              <div>
+                <h4>{{ ticket.title }}</h4>
+                <p class="ticket-description">{{ ticket.description }}</p>
+              </div>
 
-      <div class="field">
-        <label>Dirección</label>
-        <input pInputText formControlName="address" />
-        <p-message *ngIf="isInvalid('address')" severity="error" text="Requerido"></p-message>
-      </div>
+              <div class="ticket-badges">
+                <span class="detail-badge status">{{ ticket.status }}</span>
+                <span class="detail-badge priority" [ngClass]="ticket.priority.toLowerCase()">
+                  {{ ticket.priority }}
+                </span>
+              </div>
+            </div>
 
-      <div class="field">
-        <label>Teléfono</label>
-        <input pInputText formControlName="phone" />
-        <p-message *ngIf="isInvalid('phone')" severity="error" text="Solo números"></p-message>
-      </div>
+            <div class="ticket-info-grid">
+              <div class="ticket-info-item">
+                <span class="ticket-label">Asignado a</span>
+                <span>{{ ticket.assignedTo }}</span>
+              </div>
 
-      <div class="field">
-        <label>Fecha nacimiento</label>
-        <input pInputText formControlName="birthDate" />
-        <p-message *ngIf="isInvalid('birthDate')" severity="error" text="Requerido"></p-message>
+              <div class="ticket-info-item">
+                <span class="ticket-label">Fecha creación</span>
+                <span>{{ ticket.createdAt }}</span>
+              </div>
+
+              <div class="ticket-info-item">
+                <span class="ticket-label">Fecha límite</span>
+                <span>{{ ticket.dueDate }}</span>
+              </div>
+            </div>
+
+            <div class="comments-block">
+              <strong>Comentarios</strong>
+              <ul *ngIf="ticket.comments.length > 0; else noCommentsList">
+                <li *ngFor="let comment of ticket.comments">
+                  {{ comment }}
+                </li>
+              </ul>
+
+              <ng-template #noCommentsList>
+                <p class="muted-text">Sin comentarios.</p>
+              </ng-template>
+            </div>
+          </div>
+        </div>
       </div>
-    </form>
+    </div>
+
+    <ng-template #noUserLogged>
+      <div class="empty-state">
+        No hay usuario logueado actualmente.
+      </div>
+    </ng-template>
   </p-card>
 </div>

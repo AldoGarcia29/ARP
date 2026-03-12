@@ -1,0 +1,142 @@
+<p-toast></p-toast>
+
+<div class="page">
+  <div class="top-bar">
+    <h2>Gestión de Usuarios</h2>
+
+    <button
+      pButton
+      type="button"
+      label="Nuevo Usuario"
+      icon="pi pi-plus"
+      severity="success"
+      (click)="openNew()">
+    </button>
+  </div>
+
+  <p-table [value]="users" responsiveLayout="scroll">
+    <ng-template pTemplate="header">
+      <tr>
+        <th>Usuario</th>
+        <th>Email</th>
+        <th>Nombre</th>
+        <th>Grupo</th>
+        <th>Tickets</th>
+        <th>Acciones</th>
+      </tr>
+    </ng-template>
+
+    <ng-template pTemplate="body" let-user>
+      <tr>
+        <td>{{ user.username }}</td>
+        <td>{{ user.email }}</td>
+        <td>{{ user.fullName }}</td>
+        <td>{{ user.email === 'aldo@gmail.com' ? 'superAdmin' : 'usuario' }}</td>
+        <td>
+          {{ user.permissions.canEditTickets ? 'Avanzado' : 'Básico' }}
+        </td>
+        <td class="actions-cell">
+          <button
+            pButton
+            type="button"
+            icon="pi pi-pencil"
+            severity="secondary"
+            (click)="editUser(user)">
+          </button>
+
+          <button
+            pButton
+            type="button"
+            icon="pi pi-trash"
+            severity="danger"
+            (click)="deleteUser(user)">
+          </button>
+        </td>
+      </tr>
+    </ng-template>
+  </p-table>
+</div>
+
+<p-dialog
+  [(visible)]="dialogVisible"
+  [modal]="true"
+  [draggable]="false"
+  [resizable]="false"
+  [style]="{ width: '900px', maxWidth: '95vw' }"
+  [header]="editingUserId === null ? 'Nuevo Usuario' : 'Editar Usuario'">
+
+  <form [formGroup]="form" class="form-grid">
+    <div class="field">
+      <label>Usuario</label>
+      <input pInputText formControlName="username" />
+    </div>
+
+    <div class="field">
+      <label>Email</label>
+      <input pInputText formControlName="email" />
+    </div>
+
+    <div class="field">
+      <label>Nombre completo</label>
+      <input pInputText formControlName="fullName" />
+    </div>
+
+    <div class="field">
+      <label>Contraseña</label>
+      <input pInputText formControlName="password" />
+    </div>
+
+    <div class="field">
+      <label>Dirección</label>
+      <input pInputText formControlName="address" />
+    </div>
+
+    <div class="field">
+      <label>Teléfono</label>
+      <input pInputText formControlName="phone" />
+    </div>
+
+    <div class="field">
+      <label>Fecha nacimiento</label>
+      <input pInputText type="date" formControlName="birthDate" />
+    </div>
+
+    <div class="permissions full">
+      <h3>Permisos</h3>
+
+      <div class="perm-grid">
+        <label><input type="checkbox" formControlName="canManageGroups" /> Ver gestión de grupos</label>
+<label><input type="checkbox" formControlName="canManageUsers" /> Ver gestión de usuarios</label>
+        <label><input type="checkbox" formControlName="canCreateGroup" /> Crear grupo</label>
+        <label><input type="checkbox" formControlName="canEditGroup" /> Editar grupo</label>
+        <label><input type="checkbox" formControlName="canDeleteGroup" /> Eliminar grupo</label>
+        <label><input type="checkbox" formControlName="canAddMembers" /> Agregar miembros</label>
+        <label><input type="checkbox" formControlName="canRemoveMembers" /> Quitar miembros</label>
+        <label><input type="checkbox" formControlName="canCreateTickets" /> Crear tickets</label>
+        <label><input type="checkbox" formControlName="canEditTickets" /> Editar tickets</label>
+        <label><input type="checkbox" formControlName="canViewTicketDetail" /> Ver detalle ticket</label>
+        
+      </div>
+    </div>
+  </form>
+
+  <ng-template pTemplate="footer">
+    <button
+      pButton
+      type="button"
+      label="Cancelar"
+      icon="pi pi-times"
+      severity="secondary"
+      (click)="dialogVisible = false">
+    </button>
+
+    <button
+      pButton
+      type="button"
+      label="Guardar"
+      icon="pi pi-save"
+      severity="success"
+      (click)="saveUser()">
+    </button>
+  </ng-template>
+</p-dialog>

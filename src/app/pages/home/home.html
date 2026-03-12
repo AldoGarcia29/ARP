@@ -1,3 +1,113 @@
-<p-card header="Home">
-  <p>Bienvenido al sistema</p>
-</p-card>
+<div class="page">
+  <div class="hero">
+    <div>
+      <h2>Dashboard</h2>
+      <p class="subtitle">
+        Bienvenido{{ currentUser ? ', ' + currentUser.fullName : '' }}
+      </p>
+    </div>
+  </div>
+
+  <div class="stats-grid">
+    <div class="stat-card total">
+      <div class="stat-label">Total tickets</div>
+      <div class="stat-value">{{ totalTickets }}</div>
+      <div class="stat-foot">De mis grupos</div>
+    </div>
+
+    <div class="stat-card pending">
+      <div class="stat-label">Pendientes</div>
+      <div class="stat-value">{{ pendingTicketsCount }}</div>
+      <div class="stat-foot">Estado actual</div>
+    </div>
+
+    <div class="stat-card progress">
+      <div class="stat-label">En progreso</div>
+      <div class="stat-value">{{ inProgressTicketsCount }}</div>
+      <div class="stat-foot">Estado actual</div>
+    </div>
+
+    <div class="stat-card review">
+      <div class="stat-label">Revisión</div>
+      <div class="stat-value">{{ reviewTicketsCount }}</div>
+      <div class="stat-foot">Estado actual</div>
+    </div>
+
+    <div class="stat-card done">
+      <div class="stat-label">Finalizados</div>
+      <div class="stat-value">{{ doneTicketsCount }}</div>
+      <div class="stat-foot">Estado actual</div>
+    </div>
+  </div>
+
+  <p-card header="Mis grupos" class="card">
+    <div *ngIf="myGroups.length === 0" class="empty-state">
+      No estás asignado a ningún grupo.
+    </div>
+
+    <div class="groups-grid" *ngIf="myGroups.length > 0">
+      <div class="group-card" *ngFor="let group of myGroups">
+        <div class="group-top">
+          <h3>{{ group.name }}</h3>
+          <p-tag
+            [value]="group.level"
+            [severity]="levelSeverity(group.level)">
+          </p-tag>
+        </div>
+
+        <p><strong>Autor:</strong> {{ group.author }}</p>
+        <p><strong>Descripción:</strong> {{ group.description }}</p>
+
+        <div class="group-actions">
+          <button
+            pButton
+            type="button"
+            label="Ver"
+            icon="pi pi-eye"
+            severity="info"
+            [routerLink]="['/group-view', group.id]"
+          ></button>
+        </div>
+      </div>
+    </div>
+  </p-card>
+
+  <p-card header="Mis tickets asignados" class="card">
+    <div *ngIf="myAssignedTickets.length === 0" class="empty-state">
+      No tienes tickets asignados.
+    </div>
+
+    <div class="tickets-list" *ngIf="myAssignedTickets.length > 0">
+      <div class="ticket-item" *ngFor="let ticket of myAssignedTickets">
+        <div class="ticket-main">
+          <h4>{{ ticket.title }}</h4>
+          <p><strong>Grupo:</strong> {{ getGroupName(ticket.groupId) }}</p>
+          <p><strong>Fecha límite:</strong> {{ ticket.dueDate }}</p>
+
+          <div class="ticket-tags">
+            <p-tag
+              [value]="ticket.status"
+              [severity]="statusSeverity(ticket.status)">
+            </p-tag>
+
+            <p-tag
+              [value]="ticket.priority"
+              [severity]="prioritySeverity(ticket.priority)">
+            </p-tag>
+          </div>
+        </div>
+
+        <div class="ticket-actions">
+          <button
+            pButton
+            type="button"
+            label="Ver grupo"
+            icon="pi pi-arrow-right"
+            severity="secondary"
+            [routerLink]="['/group-view', ticket.groupId]"
+          ></button>
+        </div>
+      </div>
+    </div>
+  </p-card>
+</div>

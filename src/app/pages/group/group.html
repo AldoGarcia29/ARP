@@ -6,6 +6,7 @@
     <h2>Groups</h2>
 
     <button
+      *ngIf="canCreateGroups"
       pButton
       type="button"
       label="Nuevo Group"
@@ -23,12 +24,13 @@
 
   <p-card header="Listado" class="card">
     <p-table
-      [value]="groups"
+      [value]="visibleGroups"
       [paginator]="true"
       [rows]="5"
       [rowsPerPageOptions]="[5,10,20]"
       responsiveLayout="scroll"
     >
+
       <ng-template pTemplate="header">
         <tr>
           <th>Nombre</th>
@@ -37,8 +39,7 @@
           <th>Integrantes</th>
           <th>Tickets</th>
           <th>Descripción</th>
-
-          <th style="width: 200px">Acciones</th>
+          <th style="width:280px">Acciones</th>
         </tr>
       </ng-template>
 
@@ -47,18 +48,32 @@
           <td>{{ g.name }}</td>
 
           <td>
-            <p-tag [value]="g.level" [severity]="levelSeverity(g.level)"></p-tag>
+            <p-tag
+              [value]="g.level"
+              [severity]="levelSeverity(g.level)">
+            </p-tag>
           </td>
 
           <td>{{ g.author }}</td>
-          <td>{{ g.members }}</td>
-          <td>{{ g.tickets }}</td>
-          <td class="desc">
-  {{ g.description }}
-</td>
+          <td>{{ getMembersCount(g) }}</td>
+          <td>{{ getTicketsCount(g) }}</td>
+          <td class="desc">{{ g.description }}</td>
 
           <td class="actions">
+
+            <!-- VER -->
             <button
+              pButton
+              type="button"
+              icon="pi pi-eye"
+              label="Ver"
+              severity="info"
+              [routerLink]="['/group-view', g.id]"
+            ></button>
+
+            <!-- EDITAR -->
+            <button
+              *ngIf="canEditGroupPermission(g)"
               pButton
               type="button"
               icon="pi pi-pencil"
@@ -67,7 +82,9 @@
               (click)="editGroup(g)"
             ></button>
 
+            <!-- BORRAR -->
             <button
+              *ngIf="canDeleteGroupPermission(g)"
               pButton
               type="button"
               icon="pi pi-trash"
@@ -75,92 +92,197 @@
               severity="danger"
               (click)="deleteGroup(g)"
             ></button>
+
           </td>
         </tr>
       </ng-template>
 
       <ng-template pTemplate="emptymessage">
         <tr>
-          <td colspan="6">No hay grupos aún.</td>
+          <td colspan="7">No hay grupos aún.</td>
         </tr>
       </ng-template>
+
     </p-table>
   </p-card>
 
+
+  <!-- DIALOG GROUP -->
   <p-dialog
     [(visible)]="dialogVisible"
     [modal]="true"
     [draggable]="false"
     [resizable]="false"
-    [style]="{ width: '720px', maxWidth: '95vw' }"
+    [style]="{ width: '820px', maxWidth: '95vw' }"
     [header]="editingId === null ? 'Nuevo Group' : 'Editar Group'"
     (onHide)="onDialogHide()"
   >
+
     <form [formGroup]="form" class="formGrid">
+
       <div class="field">
         <label>Nivel</label>
+
         <p-select
           [options]="levels"
           optionLabel="label"
           optionValue="value"
           formControlName="level"
-          placeholder="Selecciona nivel"
-        ></p-select>
-        <p-message *ngIf="isInvalid('level')" severity="error" text="Requerido"></p-message>
+          placeholder="Selecciona nivel">
+        </p-select>
+
+        <p-message
+          *ngIf="isInvalid('level')"
+          severity="error"
+          text="Requerido">
+        </p-message>
       </div>
+
 
       <div class="field">
         <label>Autor</label>
-        <input pInputText formControlName="author" placeholder="Ej: Aldo Garcia" />
-        <p-message *ngIf="isInvalid('author')" severity="error" text="Requerido"></p-message>
+
+        <input
+          pInputText
+          formControlName="author"
+          placeholder="Ej: Aldo Garcia"
+        />
+
+        <p-message
+          *ngIf="isInvalid('author')"
+          severity="error"
+          text="Requerido">
+        </p-message>
       </div>
+
 
       <div class="field full">
         <label>Nombre</label>
-        <input pInputText formControlName="name" placeholder="Ej: ARP Starter" />
-        <p-message *ngIf="isInvalid('name')" severity="error" text="Requerido"></p-message>
+
+        <input
+          pInputText
+          formControlName="name"
+          placeholder="Ej: ARP Starter"
+        />
+
+        <p-message
+          *ngIf="isInvalid('name')"
+          severity="error"
+          text="Requerido">
+        </p-message>
       </div>
 
-      <div class="field">
-        <label>Integrantes</label>
-        <p-inputNumber formControlName="members" [min]="1"></p-inputNumber>
-        <p-message *ngIf="isInvalid('members')" severity="error" text="Mínimo 1"></p-message>
-      </div>
-
-      <div class="field">
-        <label>Tickets</label>
-        <p-inputNumber formControlName="tickets" [min]="0"></p-inputNumber>
-        <p-message *ngIf="isInvalid('tickets')" severity="error" text="Mínimo 0"></p-message>
-      </div>
 
       <div class="field full">
         <label>Descripción</label>
 
-        <!-- ✅ sin módulo extra: se ve como PrimeNG por la clase -->
         <textarea
           class="p-inputtext p-component"
           rows="4"
           formControlName="description"
-          placeholder="Describe el group..."
-        ></textarea>
+          placeholder="Describe el group...">
+        </textarea>
 
         <p-message
           *ngIf="isInvalid('description')"
           severity="error"
-          text="Requerido (mínimo 10 caracteres)"
-        ></p-message>
+          text="Requerido (mínimo 10 caracteres)">
+        </p-message>
       </div>
+
     </form>
 
+
+    <!-- MIEMBROS -->
+    <div class="membersSection" *ngIf="editingId !== null">
+
+      <h3>Miembros del grupo</h3>
+
+      <!-- AGREGAR -->
+      <div class="memberAddRow" *ngIf="canEditCurrentGroupMembers">
+
+        <div class="memberSelect">
+          <label>Agregar usuario</label>
+
+          <p-select
+            [options]="availableUsers"
+            optionLabel="fullName"
+            optionValue="id"
+            [(ngModel)]="selectedUserId"
+            [ngModelOptions]="{ standalone: true }"
+            placeholder="Selecciona usuario">
+          </p-select>
+        </div>
+
+        <button
+          pButton
+          type="button"
+          label="Agregar"
+          icon="pi pi-user-plus"
+          severity="success"
+          (click)="addMember()"
+          [disabled]="selectedUserId === null">
+        </button>
+
+      </div>
+
+
+      <div class="emptyMembers" *ngIf="!canEditCurrentGroupMembers">
+        No tienes permiso para gestionar miembros de este grupo.
+      </div>
+
+
+      <!-- LISTA MIEMBROS -->
+      <div class="membersList">
+
+        <div
+          class="memberItem"
+          *ngFor="let user of currentMembers">
+
+          <div>
+            <strong>{{ user.fullName }}</strong>
+
+            <div class="memberMeta">
+              {{ user.username }} • {{ user.email }}
+            </div>
+          </div>
+
+          <button
+            *ngIf="canEditCurrentGroupMembers"
+            pButton
+            type="button"
+            icon="pi pi-times"
+            label="Quitar"
+            severity="danger"
+            (click)="removeMember(user.id)">
+          </button>
+
+        </div>
+
+        <div
+          *ngIf="currentMembers.length === 0"
+          class="emptyMembers">
+
+          Este grupo aún no tiene miembros.
+
+        </div>
+
+      </div>
+
+    </div>
+
+
+    <!-- FOOTER -->
     <ng-template pTemplate="footer">
+
       <button
         pButton
         type="button"
         label="Cancelar"
         icon="pi pi-times"
         severity="secondary"
-        (click)="dialogVisible = false"
-      ></button>
+        (click)="dialogVisible = false">
+      </button>
 
       <button
         pButton
@@ -168,8 +290,10 @@
         label="Guardar"
         icon="pi pi-save"
         severity="success"
-        (click)="save()"
-      ></button>
+        (click)="save()">
+      </button>
+
     </ng-template>
+
   </p-dialog>
 </div>

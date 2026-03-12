@@ -10,18 +10,24 @@ import { PasswordModule } from 'primeng/password';
 import { MessageModule } from 'primeng/message';
 import { ToastModule } from 'primeng/toast';
 import { MessageService } from 'primeng/api';
+import { AppUser } from '../../models/user.model';
 
-type Profile = {
-  username: string;
-  email: string;
-  fullName: string;
-  password: string;
-  address: string;
-  phone: string;
-  birthDate: string;
+type Ticket = {
+  id: number;
+  title: string;
+  description: string;
+  status: 'Pendiente' | 'En progreso' | 'Revisión' | 'Finalizado';
+  assignedTo: string;
+  priority: 'Baja' | 'Media' | 'Alta';
+  createdAt: string;
+  dueDate: string;
+  comments: string[];
+  groupId: number;
 };
 
-const KEY = 'arp_profile';
+const USERS_KEY = 'arp_users';
+const CURRENT_USER_KEY = 'arp_current_user';
+const TICKETS_KEY = 'arp_tickets';
 
 @Component({
   selector: 'app-users-page',
@@ -45,15 +51,31 @@ export class Users implements OnInit {
   submitted = false;
   editing = false;
 
-  // ✅ Datos demo (los tuyos)
-  profile: Profile = {
-    username: 'Aldo Garcia',
-    email: 'aldopro@gmail.com',
-    fullName: 'Aldo Jair Garcia Pacheco',
-    password: 'Admin@12345!',
-    address: 'Avenida de la Luz',
-    phone: '4423936181',
-    birthDate: '29-Enero-2005',
+  users: AppUser[] = [];
+  currentUser: AppUser | null = null;
+  tickets: Ticket[] = [];
+
+  profile: AppUser = {
+    id: 0,
+    username: '',
+    email: '',
+    fullName: '',
+    password: '',
+    address: '',
+    phone: '',
+    birthDate: '',
+    permissions: {
+      canCreateGroup: false,
+      canEditGroup: false,
+      canDeleteGroup: false,
+      canAddMembers: false,
+      canRemoveMembers: false,
+      canCreateTickets: false,
+      canEditTickets: false,
+      canViewTicketDetail: true,
+                                canManageGroups: false,
+  canManageUsers: false
+    }
   };
 
   form!: FormGroup;
@@ -73,47 +95,119 @@ export class Users implements OnInit {
     });
   }
 
-
   ngOnInit(): void {
-    // 1) Cargar de localStorage si existe, si no guardar el demo
-    const saved = this.getProfile();
-    if (saved) this.profile = saved;
-    else this.saveProfile(this.profile);
+    this.loadUsers();
+    this.loadCurrentUser();
+    this.loadTickets();
 
-    // 2) Cargar a form y bloquear edición
-    this.form.patchValue(this.profile);
+    if (this.currentUser) {
+      const fullUser = this.users.find(u => u.id === this.currentUser!.id);
+
+      if (fullUser) {
+        this.currentUser = { ...fullUser };
+        localStorage.setItem(CURRENT_USER_KEY, JSON.stringify(this.currentUser));
+      }
+
+      this.profile = { ...this.currentUser };
+      this.form.patchValue(this.profile);
+    }
+
     this.form.disable();
   }
 
-  // ---------- R (Read) ----------
-  private getProfile(): Profile | null {
-    const raw = localStorage.getItem(KEY);
-    if (!raw) return null;
+  private loadUsers(): void {
+    const raw = localStorage.getItem(USERS_KEY);
+    if (!raw) {
+      this.users = [];
+      return;
+    }
+
     try {
-      return JSON.parse(raw) as Profile;
+      this.users = JSON.parse(raw) as AppUser[];
     } catch {
-      return null;
+      this.users = [];
     }
   }
 
-  // ---------- U (Update) ----------
-  startEdit() {
+  private loadCurrentUser(): void {
+    const raw = localStorage.getItem(CURRENT_USER_KEY);
+    if (!raw) {
+      this.currentUser = null;
+      return;
+    }
+
+    try {
+      this.currentUser = JSON.parse(raw) as AppUser;
+    } catch {
+      this.currentUser = null;
+    }
+  }
+
+  private loadTickets(): void {
+    const raw = localStorage.getItem(TICKETS_KEY);
+    if (!raw) {
+      this.tickets = [];
+      return;
+    }
+
+    try {
+      this.tickets = JSON.parse(raw) as Ticket[];
+    } catch {
+      this.tickets = [];
+    }
+  }
+
+  get assignedTickets(): Ticket[] {
+    if (!this.currentUser) return [];
+
+    const currentNames = [
+      this.currentUser.username?.trim().toLowerCase(),
+      this.currentUser.fullName?.split(' ')[0]?.trim().toLowerCase(),
+      this.currentUser.fullName?.trim().toLowerCase()
+    ].filter(Boolean);
+
+    return this.tickets.filter(ticket =>
+      currentNames.includes(ticket.assignedTo.trim().toLowerCase())
+    );
+  }
+
+  get openTicketsCount(): number {
+    return this.assignedTickets.filter(t => t.status === 'Pendiente').length;
+  }
+
+  get inProgressTicketsCount(): number {
+    return this.assignedTickets.filter(t => t.status === 'En progreso').length;
+  }
+
+  get doneTicketsCount(): number {
+    return this.assignedTickets.filter(t => t.status === 'Finalizado').length;
+  }
+
+  get reviewTicketsCount(): number {
+    return this.assignedTickets.filter(t => t.status === 'Revisión').length;
+  }
+
+  get totalAssignedTicketsCount(): number {
+    return this.assignedTickets.length;
+  }
+
+  startEdit(): void {
     this.editing = true;
     this.submitted = false;
     this.form.enable();
   }
 
-  cancelEdit() {
+  cancelEdit(): void {
     this.editing = false;
     this.submitted = false;
     this.form.patchValue(this.profile);
     this.form.disable();
   }
 
-  saveChanges() {
+  saveChanges(): void {
     this.submitted = true;
 
-    if (this.form.invalid) {
+    if (this.form.invalid || !this.currentUser) {
       this.msg.add({
         severity: 'error',
         summary: 'Error',
@@ -122,11 +216,22 @@ export class Users implements OnInit {
       return;
     }
 
-    const updated = this.form.getRawValue() as Profile;
+    const updatedForm = this.form.getRawValue();
 
-    // Actualiza en memoria + localStorage
-    this.profile = updated;
-    this.saveProfile(updated);
+    const updatedProfile: AppUser = {
+      ...this.currentUser,
+      ...updatedForm
+    };
+
+    this.users = this.users.map(user =>
+      user.id === updatedProfile.id ? updatedProfile : user
+    );
+
+    localStorage.setItem(USERS_KEY, JSON.stringify(this.users));
+    localStorage.setItem(CURRENT_USER_KEY, JSON.stringify(updatedProfile));
+
+    this.currentUser = updatedProfile;
+    this.profile = updatedProfile;
 
     this.msg.add({
       severity: 'success',
@@ -138,16 +243,16 @@ export class Users implements OnInit {
     this.form.disable();
   }
 
-  private saveProfile(p: Profile) {
-    localStorage.setItem(KEY, JSON.stringify(p));
-  }
+  deleteProfile(): void {
+    if (!this.currentUser) return;
 
-  // ---------- D (Delete) ----------
-  deleteProfile() {
-    localStorage.removeItem(KEY);
+    this.users = this.users.filter(user => user.id !== this.currentUser!.id);
+    localStorage.setItem(USERS_KEY, JSON.stringify(this.users));
+    localStorage.removeItem(CURRENT_USER_KEY);
 
-    // Dejas el demo o vacías (yo dejo demo para que no quede vacío)
+    this.currentUser = null;
     this.profile = {
+      id: 0,
       username: '',
       email: '',
       fullName: '',
@@ -155,6 +260,18 @@ export class Users implements OnInit {
       address: '',
       phone: '',
       birthDate: '',
+      permissions: {
+        canCreateGroup: false,
+        canEditGroup: false,
+        canDeleteGroup: false,
+        canAddMembers: false,
+        canRemoveMembers: false,
+        canCreateTickets: false,
+        canEditTickets: false,
+        canViewTicketDetail: true,
+                                  canManageGroups: false,
+  canManageUsers: false
+      }
     };
 
     this.form.reset(this.profile);
@@ -168,7 +285,7 @@ export class Users implements OnInit {
     });
   }
 
-  isInvalid(name: string) {
+  isInvalid(name: string): boolean {
     const c = this.form.get(name);
     return !!c && c.invalid && (c.touched || this.submitted);
   }
