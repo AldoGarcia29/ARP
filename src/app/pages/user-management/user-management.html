@@ -4,57 +4,74 @@
   <div class="top-bar">
     <h2>Gestión de Usuarios</h2>
 
-    <button
-      pButton
-      type="button"
-      label="Nuevo Usuario"
-      icon="pi pi-plus"
-      severity="success"
-      (click)="openNew()">
-    </button>
+    <div class="top-actions">
+      <button
+        pButton
+        type="button"
+        label="Recargar"
+        icon="pi pi-refresh"
+        severity="secondary"
+        (click)="loadInitialData()">
+      </button>
+
+      <button
+        pButton
+        type="button"
+        label="Nuevo Usuario"
+        icon="pi pi-plus"
+        severity="success"
+        (click)="openNew()">
+      </button>
+    </div>
   </div>
 
-  <p-table [value]="users" responsiveLayout="scroll">
-    <ng-template pTemplate="header">
-      <tr>
-        <th>Usuario</th>
-        <th>Email</th>
-        <th>Nombre</th>
-        <th>Grupo</th>
-        <th>Tickets</th>
-        <th>Acciones</th>
-      </tr>
-    </ng-template>
+  <div class="table-wrap">
+    <p-table [value]="users" responsiveLayout="scroll">
+      <ng-template pTemplate="header">
+        <tr>
+          <th>Usuario</th>
+          <th>Email</th>
+          <th>Nombre</th>
+          <th>Rol</th>
+          <th>Estado</th>
+          <th>Acciones</th>
+        </tr>
+      </ng-template>
 
-    <ng-template pTemplate="body" let-user>
-      <tr>
-        <td>{{ user.username }}</td>
-        <td>{{ user.email }}</td>
-        <td>{{ user.fullName }}</td>
-        <td>{{ user.email === 'aldo@gmail.com' ? 'superAdmin' : 'usuario' }}</td>
-        <td>
-          {{ user.permissions.canEditTickets ? 'Avanzado' : 'Básico' }}
-        </td>
-        <td class="actions-cell">
-          <button
-            pButton
-            type="button"
-            icon="pi pi-pencil"
-            severity="secondary"
-            (click)="editUser(user)">
-          </button>
+      <ng-template pTemplate="body" let-user>
+        <tr>
+          <td>{{ user.username }}</td>
+          <td>{{ user.email }}</td>
+          <td>{{ user.nombre_completo }}</td>
+          <td>{{ getRoleLabel(user) }}</td>
+          <td>{{ user.activo === false ? 'Inactivo' : 'Activo' }}</td>
+          <td class="actions-cell">
+            <button
+              pButton
+              type="button"
+              icon="pi pi-pencil"
+              severity="secondary"
+              (click)="editUser(user)">
+            </button>
 
-          <button
-            pButton
-            type="button"
-            icon="pi pi-trash"
-            severity="danger"
-            (click)="deleteUser(user)">
-          </button>
-        </td>
-      </tr>
-    </ng-template>
-  </p-table>
+            <button
+              pButton
+              type="button"
+              icon="pi pi-trash"
+              severity="danger"
+              (click)="deleteUser(user)">
+            </button>
+          </td>
+        </tr>
+      </ng-template>
+
+      <ng-template pTemplate="emptymessage">
+        <tr>
+          <td colspan="6">No hay usuarios registrados.</td>
+        </tr>
+      </ng-template>
+    </p-table>
+  </div>
 </div>
 
 <p-dialog
@@ -62,63 +79,179 @@
   [modal]="true"
   [draggable]="false"
   [resizable]="false"
-  [style]="{ width: '900px', maxWidth: '95vw' }"
-  [header]="editingUserId === null ? 'Nuevo Usuario' : 'Editar Usuario'">
+  [style]="{ width: '1100px', maxWidth: '96vw' }"
+  [header]="editingUserId === null ? 'Nuevo Usuario' : 'Editar Usuario'"
+  (onHide)="closeDialog()">
 
   <form [formGroup]="form" class="form-grid">
     <div class="field">
       <label>Usuario</label>
       <input pInputText formControlName="username" />
+      <p-message
+        *ngIf="isInvalid('username')"
+        severity="error"
+        text="Requerido">
+      </p-message>
     </div>
 
     <div class="field">
       <label>Email</label>
       <input pInputText formControlName="email" />
+      <p-message
+        *ngIf="isInvalid('email')"
+        severity="error"
+        text="Email inválido">
+      </p-message>
     </div>
 
     <div class="field">
       <label>Nombre completo</label>
       <input pInputText formControlName="fullName" />
+      <p-message
+        *ngIf="isInvalid('fullName')"
+        severity="error"
+        text="Requerido">
+      </p-message>
     </div>
 
     <div class="field">
       <label>Contraseña</label>
-      <input pInputText formControlName="password" />
+      <input pInputText type="password" formControlName="password" />
+      <p-message
+        *ngIf="isInvalid('password')"
+        severity="error"
+        [text]="editingUserId === null ? 'Requerido' : 'Opcional al editar'">
+      </p-message>
     </div>
 
     <div class="field">
       <label>Dirección</label>
       <input pInputText formControlName="address" />
+      <p-message
+        *ngIf="isInvalid('address')"
+        severity="error"
+        text="Requerido">
+      </p-message>
     </div>
 
     <div class="field">
       <label>Teléfono</label>
       <input pInputText formControlName="phone" />
+      <p-message
+        *ngIf="isInvalid('phone')"
+        severity="error"
+        text="Solo números">
+      </p-message>
     </div>
 
     <div class="field">
       <label>Fecha nacimiento</label>
       <input pInputText type="date" formControlName="birthDate" />
-    </div>
-
-    <div class="permissions full">
-      <h3>Permisos</h3>
-
-      <div class="perm-grid">
-        <label><input type="checkbox" formControlName="canManageGroups" /> Ver gestión de grupos</label>
-<label><input type="checkbox" formControlName="canManageUsers" /> Ver gestión de usuarios</label>
-        <label><input type="checkbox" formControlName="canCreateGroup" /> Crear grupo</label>
-        <label><input type="checkbox" formControlName="canEditGroup" /> Editar grupo</label>
-        <label><input type="checkbox" formControlName="canDeleteGroup" /> Eliminar grupo</label>
-        <label><input type="checkbox" formControlName="canAddMembers" /> Agregar miembros</label>
-        <label><input type="checkbox" formControlName="canRemoveMembers" /> Quitar miembros</label>
-        <label><input type="checkbox" formControlName="canCreateTickets" /> Crear tickets</label>
-        <label><input type="checkbox" formControlName="canEditTickets" /> Editar tickets</label>
-        <label><input type="checkbox" formControlName="canViewTicketDetail" /> Ver detalle ticket</label>
-        
-      </div>
+      <p-message
+        *ngIf="isInvalid('birthDate')"
+        severity="error"
+        text="Requerido">
+      </p-message>
     </div>
   </form>
+
+  <p-divider></p-divider>
+
+  <div class="permissions-layout">
+    <div class="permissions-block">
+      <h3>Permisos globales</h3>
+
+      <div
+        class="perm-grid"
+        *ngIf="globalPermissionsCatalog.length > 0; else noGlobalPermissions">
+
+        <label
+          class="perm-item"
+          *ngFor="let permission of globalPermissionsCatalog">
+
+          <input
+            type="checkbox"
+            [checked]="hasGlobalPermission(permission.id)"
+            (change)="toggleGlobalPermission(permission.id, $any($event.target).checked)" />
+
+          <span>
+            <strong>{{ permission.codigo }}</strong>
+            <small>{{ permission.descripcion }}</small>
+          </span>
+        </label>
+      </div>
+
+      <ng-template #noGlobalPermissions>
+        <div class="empty-box">
+          No hay permisos globales disponibles.
+        </div>
+      </ng-template>
+    </div>
+
+    <div class="permissions-block">
+      <h3>Permisos por grupo</h3>
+
+      <div class="group-selector">
+        <label>Selecciona grupo</label>
+
+        <select
+          [(ngModel)]="selectedGroupId"
+          [ngModelOptions]="{ standalone: true }"
+          (ngModelChange)="onSelectedGroupChange()">
+
+          <option [ngValue]="null">-- Selecciona un grupo --</option>
+
+          <option
+            *ngFor="let group of userGroups"
+            [ngValue]="group.grupo_id">
+            {{ group.grupo_nombre }}
+          </option>
+        </select>
+      </div>
+
+      <div *ngIf="selectedGroupId; else noGroupSelected">
+        <div class="group-selected-title">
+          Grupo seleccionado: <strong>{{ selectedGroupName }}</strong>
+        </div>
+
+        <div
+          class="perm-grid"
+          *ngIf="groupPermissionsCatalog.length > 0; else noGroupPermissions">
+
+          <label
+            class="perm-item"
+            *ngFor="let permission of groupPermissionsCatalog">
+
+            <input
+              type="checkbox"
+              [checked]="hasGroupPermission(permission.id)"
+              (change)="toggleGroupPermission(permission.id, $any($event.target).checked)" />
+
+            <span>
+              <strong>{{ permission.codigo }}</strong>
+              <small>{{ permission.descripcion }}</small>
+            </span>
+          </label>
+        </div>
+
+        <ng-template #noGroupPermissions>
+          <div class="empty-box">
+            No hay permisos de grupo disponibles.
+          </div>
+        </ng-template>
+      </div>
+
+      <ng-template #noGroupSelected>
+        <div class="empty-box">
+          {{
+            isEditing
+              ? 'Este usuario no pertenece a ningún grupo o aún no se ha seleccionado uno.'
+              : 'Primero crea el usuario. Después, cuando pertenezca a grupos, podrás asignarle permisos por grupo.'
+          }}
+        </div>
+      </ng-template>
+    </div>
+  </div>
 
   <ng-template pTemplate="footer">
     <button
@@ -127,7 +260,7 @@
       label="Cancelar"
       icon="pi pi-times"
       severity="secondary"
-      (click)="dialogVisible = false">
+      (click)="closeDialog()">
     </button>
 
     <button
@@ -136,6 +269,7 @@
       label="Guardar"
       icon="pi pi-save"
       severity="success"
+      [disabled]="saving"
       (click)="saveUser()">
     </button>
   </ng-template>

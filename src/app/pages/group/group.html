@@ -6,7 +6,7 @@
     <h2>Groups</h2>
 
     <button
-      *ngIf="canCreateGroups"
+      *appHasPermission="'group:add'"
       pButton
       type="button"
       label="Nuevo Group"
@@ -61,8 +61,8 @@
 
           <td class="actions">
 
-            <!-- VER -->
             <button
+                *appHasGroupPermission="{ permission: 'group:view', groupId: g.id }"
               pButton
               type="button"
               icon="pi pi-eye"
@@ -71,9 +71,8 @@
               [routerLink]="['/group-view', g.id]"
             ></button>
 
-            <!-- EDITAR -->
             <button
-              *ngIf="canEditGroupPermission(g)"
+              *appHasGroupPermission="{ permission: 'group:edit', groupId: g.id }"
               pButton
               type="button"
               icon="pi pi-pencil"
@@ -82,9 +81,8 @@
               (click)="editGroup(g)"
             ></button>
 
-            <!-- BORRAR -->
             <button
-              *ngIf="canDeleteGroupPermission(g)"
+              *appHasGroupPermission="{ permission: 'group:delete', groupId: g.id }"
               pButton
               type="button"
               icon="pi pi-trash"
@@ -106,8 +104,6 @@
     </p-table>
   </p-card>
 
-
-  <!-- DIALOG GROUP -->
   <p-dialog
     [(visible)]="dialogVisible"
     [modal]="true"
@@ -138,7 +134,6 @@
         </p-message>
       </div>
 
-
       <div class="field">
         <label>Autor</label>
 
@@ -155,7 +150,6 @@
         </p-message>
       </div>
 
-
       <div class="field full">
         <label>Nombre</label>
 
@@ -171,7 +165,6 @@
           text="Requerido">
         </p-message>
       </div>
-
 
       <div class="field full">
         <label>Descripción</label>
@@ -192,16 +185,16 @@
 
     </form>
 
-
-    <!-- MIEMBROS -->
     <div class="membersSection" *ngIf="editingId !== null">
 
       <h3>Miembros del grupo</h3>
 
-      <!-- AGREGAR -->
-      <div class="memberAddRow" *ngIf="canEditCurrentGroupMembers">
-
-        <div class="memberSelect">
+<div
+  class="memberAddRow"
+  *appHasGroupPermission="{ permission: 'group:members:add', groupId: editingId! }">
+       
+  
+  <div class="memberSelect">
           <label>Agregar usuario</label>
 
           <p-select
@@ -215,24 +208,23 @@
         </div>
 
         <button
-          pButton
-          type="button"
-          label="Agregar"
-          icon="pi pi-user-plus"
-          severity="success"
-          (click)="addMember()"
-          [disabled]="selectedUserId === null">
-        </button>
+  pButton
+  type="button"
+  label="Agregar"
+  icon="pi pi-user-plus"
+  severity="success"
+  (click)="addMember()"
+  [disabled]="selectedUserId === null">
+</button>
 
       </div>
 
+      <div
+  class="emptyMembers"
+  *ngIf="editingId !== null && !canEditCurrentGroupMembers">
+  No tienes permiso para gestionar miembros de este grupo.
+</div>
 
-      <div class="emptyMembers" *ngIf="!canEditCurrentGroupMembers">
-        No tienes permiso para gestionar miembros de este grupo.
-      </div>
-
-
-      <!-- LISTA MIEMBROS -->
       <div class="membersList">
 
         <div
@@ -248,7 +240,7 @@
           </div>
 
           <button
-            *ngIf="canEditCurrentGroupMembers"
+            *appHasGroupPermission="{ permission: 'group:members:remove', groupId: editingId! }"
             pButton
             type="button"
             icon="pi pi-times"
@@ -271,8 +263,6 @@
 
     </div>
 
-
-    <!-- FOOTER -->
     <ng-template pTemplate="footer">
 
       <button
@@ -285,6 +275,7 @@
       </button>
 
       <button
+      *ngIf="editingId === null ? true : canEditCurrentGroupMembers"
         pButton
         type="button"
         label="Guardar"

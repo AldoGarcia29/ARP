@@ -7,8 +7,8 @@ import {
   ValidationErrors,
   Validators,
 } from '@angular/forms';
-import { RouterLink } from '@angular/router';
-
+import { Router, RouterLink } from '@angular/router';
+import { CommonModule } from '@angular/common';
 import { InputTextModule } from 'primeng/inputtext';
 import { PasswordModule } from 'primeng/password';
 import { ButtonModule } from 'primeng/button';
@@ -17,6 +17,8 @@ import { DatePickerModule } from 'primeng/datepicker';
 import { KeyFilterModule } from 'primeng/keyfilter';
 
 import { MessageService } from 'primeng/api';
+import { UserService } from '../../services/user.service';
+import { ToastModule } from 'primeng/toast';
 
 // Validador: contraseñas iguales
 function passwordsMatch(group: AbstractControl): ValidationErrors | null {
@@ -44,6 +46,7 @@ function isAdult(control: AbstractControl): ValidationErrors | null {
 @Component({
   selector: 'app-register',
   standalone: true,
+  providers: [MessageService],
   imports: [
     RouterLink,
     ReactiveFormsModule,
@@ -53,20 +56,27 @@ function isAdult(control: AbstractControl): ValidationErrors | null {
     MessageModule,
     DatePickerModule,
     KeyFilterModule,
+    CommonModule,
+    ToastModule
+
   ],
   templateUrl: './register.html',
   styleUrls: ['./register.scss'],
 })
 export class Register {
   submitted = false;
+  loading = false;
 
-  // símbolos especiales definidos: ! @ # $ % ^ & *
   private readonly PASSWORD_REGEX = /^(?=.*[!@#$%^&*]).{10,}$/;
 
   form!: FormGroup;
 
-  constructor(private fb: FormBuilder, private msg: MessageService) {
-    // Aquí sí ya existe fb
+  constructor(
+    private fb: FormBuilder,
+    private msg: MessageService,
+    private userService: UserService,
+    private router: Router
+  ) {
     this.form = this.fb.group(
       {
         username: ['', [Validators.required]],
@@ -78,7 +88,7 @@ export class Register {
         password: ['', [Validators.required, Validators.pattern(this.PASSWORD_REGEX)]],
         confirmPassword: ['', [Validators.required]],
       },
-      { validators: [passwordsMatch] } // aquí va el match
+      { validators: [passwordsMatch] }
     );
   }
 
@@ -103,13 +113,58 @@ export class Register {
       return;
     }
 
-    this.msg.add({
-      severity: 'success',
-      summary: 'Registro correcto',
-      detail: 'Usuario registrado (demo).',
-    });
+    const formValue = this.form.value;
 
-    this.form.reset();
-    this.submitted = false;
+    const payload = {
+      username: formValue.username ?? '',
+      email: formValue.email ?? '',
+      nombre_completo: formValue.fullName ?? '',
+      direccion: formValue.address ?? '',
+      telefono: formValue.phone ?? '',
+      fecha_nac: this.formatBirthDate(formValue.birthDate),
+      password: formValue.password ?? '',
+    };
+
+    this.loading = true;
+
+    this.userService.register(payload).subscribe({
+      next: () => {
+        this.loading = false;
+
+        this.msg.add({
+          severity: 'success',
+          summary: 'Registro correcto',
+          detail: 'Usuario registrado correctamente.',
+        });
+
+        this.form.reset();
+        this.submitted = false;
+
+        setTimeout(() => {
+          this.router.navigate(['/login']);
+        }, 1200);
+      },
+      error: (err) => {
+        this.loading = false;
+        console.error(err);
+
+        this.msg.add({
+          severity: 'error',
+          summary: 'Error al registrar',
+          detail: err?.error?.message || 'No se pudo registrar el usuario.',
+        });
+      }
+    });
+  }
+
+  private formatBirthDate(value: any): string {
+    if (!value) return '';
+
+    const date = new Date(value);
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+
+    return `${year}-${month}-${day}`;
   }
 }

@@ -1,7 +1,14 @@
 import { CommonModule } from '@angular/common';
 import { Component, OnInit } from '@angular/core';
-import { FormsModule, FormBuilder, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
+import {
+  FormsModule,
+  FormBuilder,
+  FormGroup,
+  ReactiveFormsModule,
+  Validators
+} from '@angular/forms';
 import { ActivatedRoute, RouterLink } from '@angular/router';
+import { forkJoin, of } from 'rxjs';
 
 import { ButtonModule } from 'primeng/button';
 import { DialogModule } from 'primeng/dialog';
@@ -12,8 +19,17 @@ import { ToastModule } from 'primeng/toast';
 import { TimelineModule } from 'primeng/timeline';
 import { SelectButtonModule } from 'primeng/selectbutton';
 import { MessageService } from 'primeng/api';
-import { AppUser } from '../../models/user.model';
 import { DragDropModule, CdkDragDrop } from '@angular/cdk/drag-drop';
+
+import { AppUser } from '../../models/user.model';
+import { TicketService, TicketApi } from '../../services/ticket.service';
+import { HasPermissionDirective } from '../../directives/has-permission.directive';
+import { HasGroupPermissionDirective } from '../../directives/has-group-permission.directive';
+import { GroupService } from '../../services/group.service';
+
+const USERS_KEY = 'arp_users';
+const GROUPS_KEY = 'arp_groups';
+const CURRENT_USER_KEY = 'arp_current_user';
 
 interface TicketHistory {
   date: string;
@@ -23,36 +39,33 @@ interface TicketHistory {
 }
 
 interface Ticket {
-  id: number;
-  title: string;
-  description: string;
-  status: 'Pendiente' | 'En progreso' | 'Revisión' | 'Finalizado';
-  assignedTo: string;
-  priority: 'Baja' | 'Media' | 'Alta';
-  createdAt: string;
-  dueDate: string;
+  id: string;
+  titulo: string;
+  descripcion: string;
+  estado: string;
+  estadoId: string;
+  asignadoA: string;
+  asignadoId: string | null;
+  prioridad: string;
+  prioridadId: string;
+  creadoEn: string;
+  fechaLimite: string;
+  fechaFinal: string | null;
+  grupoId: string;
+  autorId: string;
+  autorNombre: string;
   comments: string[];
-  groupId: number;
   history: TicketHistory[];
-  createdBy: string;
-  createdById: number;
 }
 
 interface GroupInfo {
-  id: number;
+  id: string;
   name: string;
   level: string;
   author: string;
   description: string;
-  memberIds: number[];
+  memberIds: Array<string | number>;
 }
-
-
-
-const USERS_KEY = 'arp_users';
-const GROUPS_KEY = 'arp_groups';
-const TICKETS_KEY = 'arp_tickets';
-const CURRENT_USER_KEY = 'arp_current_user';
 
 @Component({
   selector: 'app-group-view',
@@ -70,7 +83,9 @@ const CURRENT_USER_KEY = 'arp_current_user';
     ToastModule,
     TimelineModule,
     SelectButtonModule,
-    DragDropModule
+    DragDropModule,
+    HasPermissionDirective,
+    HasGroupPermissionDirective
   ],
   templateUrl: './group-view.html',
   styleUrl: './group-view.scss',
@@ -79,12 +94,12 @@ const CURRENT_USER_KEY = 'arp_current_user';
 export class GroupView implements OnInit {
   currentUser: AppUser | null = null;
 
-  groupId = 0;
+  groupId = '';
   dialogVisible = false;
   detailDialogVisible = false;
   submitted = false;
   currentCreatedAt = '';
-  editingTicketId: number | null = null;
+  editingTicketId: string | null = null;
   selectedTicket: Ticket | null = null;
   viewMode: 'list' | 'kanban' = 'list';
 
@@ -97,6 +112,17 @@ export class GroupView implements OnInit {
   sortField = '';
   sortOrder: 'asc' | 'desc' = 'asc';
 
+  groups: GroupInfo[] = [];
+  users: AppUser[] = [];
+  tickets: Ticket[] = [];
+
+  groupMembers: Array<{
+  id: string;
+  username?: string;
+  email: string;
+  nombre_completo?: string;
+}> = [];
+
   viewOptions = [
     { label: 'Lista', value: 'list' },
     { label: 'Kanban', value: 'kanban' }
@@ -104,10 +130,10 @@ export class GroupView implements OnInit {
 
   sortOptions = [
     { label: 'Sin ordenar', value: '' },
-    { label: 'Fecha creación', value: 'createdAt' },
-    { label: 'Fecha límite', value: 'dueDate' },
-    { label: 'Prioridad', value: 'priority' },
-    { label: 'Estado', value: 'status' }
+    { label: 'Fecha creación', value: 'creadoEn' },
+    { label: 'Fecha límite', value: 'fechaLimite' },
+    { label: 'Prioridad', value: 'prioridad' },
+    { label: 'Estado', value: 'estado' }
   ];
 
   orderOptions = [
@@ -115,102 +141,308 @@ export class GroupView implements OnInit {
     { label: 'Descendente', value: 'desc' }
   ];
 
-  groups: GroupInfo[] = [];
-  private getGroups(): GroupInfo[] | null {
-  const raw = localStorage.getItem(GROUPS_KEY);
-  if (!raw) return null;
-
-  try {
-    return JSON.parse(raw) as GroupInfo[];
-  } catch {
-    return null;
-  }
-}
-
-private loadGroups(): void {
-  const savedGroups = this.getGroups();
-  this.groups = savedGroups ?? [];
-}
-
   statusOptions = [
     { label: 'Pendiente', value: 'Pendiente' },
-    { label: 'En progreso', value: 'En progreso' },
-    { label: 'Revisión', value: 'Revisión' },
-    { label: 'Finalizado', value: 'Finalizado' }
+    { label: 'En progreso', value: 'En proceso' },
+    { label: 'Hecho', value: 'Resuelto' },
+    { label: 'Bloqueado', value: 'Cancelado' }
   ];
+
+  /**
+   * AQUÍ PON TUS IDS REALES DE PRIORIDAD
+   * Puedes cambiarlos cuando me pases la tabla de prioridades.
+   */
+  priorityCatalog: Record<string, string> = {
+  'Baja': 'fe9de325-a264-418d-b78f-87f0c9d8a67b',
+  'Media': '8ac2963d-c507-49b1-976a-f70875b39cea',
+  'Alta': 'e3624960-a46c-4bb6-bcb7-e2514035db4',
+  'Crítica': '90de4fe2-94af-4cb8-834e-c94991b39dc8'
+};
 
   priorityOptions = [
     { label: 'Baja', value: 'Baja' },
     { label: 'Media', value: 'Media' },
-    { label: 'Alta', value: 'Alta' }
+    { label: 'Alta', value: 'Alta' },
+    { label: 'Crítica', value: 'Crítica' }
   ];
 
-
-  tickets: Ticket[] = [];
-
- users: AppUser[] = [];
-
-private getUsers(): AppUser[] | null {
-  const raw = localStorage.getItem(USERS_KEY);
-  if (!raw) return null;
-
-  try {
-    return JSON.parse(raw) as AppUser[];
-  } catch {
-    return null;
-  }
-}
-
-private loadUsers(): void {
-  const savedUsers = this.getUsers();
-  this.users = savedUsers ?? [];
-}
+  /**
+   * Estos sí los sacamos de tu captura real de estados.
+   */
+  statusCatalog: Record<string, string> = {
+    'Pendiente': '54d984ee-2e6a-4279-8e87-ffba5f750a2b',
+    'En proceso': '662f5788-c382-4d86-9399-b1fcbb0f05f4',
+    'Resuelto': '4b538d39-1665-46fa-ad65-14546566bc9f',
+    'Cancelado': 'ea1ec02f-5980-4b4b-b63b-43ca9c532b87'
+  };
 
   constructor(
     private route: ActivatedRoute,
     private fb: FormBuilder,
-    private msg: MessageService
+    private msg: MessageService,
+    private ticketService: TicketService,
+    private groupService: GroupService
   ) {
     this.ticketForm = this.fb.group({
       title: ['', Validators.required],
       description: ['', [Validators.required, Validators.minLength(10)]],
       status: ['Pendiente', Validators.required],
-      assignedTo: ['', Validators.required],
+      assignedTo: ['', Validators.required],   // guardará user.id
       priority: ['Media', Validators.required],
       dueDate: ['', Validators.required],
       comment: ['']
     });
   }
 
+  loadGroupMembers(): void {
+  if (!this.groupId) return;
+
+  this.groupService.getGroupMembers(this.groupId).subscribe({
+    next: (response) => {
+      console.log("Miembros", response.data);
+      this.groupMembers = response.data ?? [];
+    },
+    error: (error) => {
+      console.error('Error al cargar miembros del grupo:', error);
+      this.groupMembers = [];
+      this.msg.add({
+        severity: 'error',
+        summary: 'Error',
+        detail: 'No se pudieron cargar los miembros del grupo.'
+      });
+    }
+  });
+}
+
+loadTicketHistory(ticketId: string): void {
+  this.ticketService.getTicketHistory(ticketId).subscribe({
+    next: (response) => {
+      if (!this.selectedTicket) return;
+
+      this.selectedTicket.history = (response.data ?? []).map(item => ({
+        date: item.creado_en,
+        action: item.accion,
+        detail: item.detalle,
+        user: item.nombre_completo || item.username || 'Usuario'
+      }));
+    },
+    error: (error) => {
+      console.error('Error al cargar historial:', error);
+
+      if (this.selectedTicket) {
+        this.selectedTicket.history = [];
+      }
+
+      this.msg.add({
+        severity: 'error',
+        summary: 'Error',
+        detail: 'No se pudo cargar el historial del ticket.'
+      });
+    }
+  });
+}
 
   ngOnInit(): void {
-
     this.loadUsers();
     this.loadGroups();
     this.loadCurrentUser();
 
     const id = this.route.snapshot.paramMap.get('id');
-    this.groupId = Number(id);
+    this.groupId = id ?? '';
 
-    const savedTickets = this.getTickets();
-this.tickets = (savedTickets ?? []).map(ticket => ({
-  ...ticket,
-  createdBy: ticket.createdBy ?? 'Usuario',
-  createdById: ticket.createdById ?? 0
-}));
+    if (this.groupId) {
+      this.loadTicketsByGroup();
+      this.loadGroupMembers();
+    }
+  }
+
+  get selectedGroup(): GroupInfo | undefined {
+    return this.groups.find(group => String(group.id) === String(this.groupId));
+  }
+
+  get reviewCount(): number {
+    return this.blockedCount;
   }
 
   get userOptions(): { label: string; value: string }[] {
-  const group = this.selectedGroup;
-  if (!group) return [];
-
-  return this.users
-    .filter(user => group.memberIds.includes(user.id))
-    .map(user => ({
-      label: user.fullName.split(' ')[0],
-      value: user.fullName.split(' ')[0]
-    }));
+  return this.groupMembers.map(user => ({
+    label: user.nombre_completo || user.username || user.email,
+    value: String(user.id)
+  }));
 }
+
+  get ticketsByGroup(): Ticket[] {
+    return this.tickets;
+  }
+
+  get filteredTicketsByGroup(): Ticket[] {
+    let result = [...this.ticketsByGroup];
+
+    if (this.statusFilter) {
+      result = result.filter(ticket => ticket.estado === this.statusFilter);
+    }
+
+    if (this.priorityFilter) {
+      result = result.filter(ticket => ticket.prioridad === this.priorityFilter);
+    }
+
+    if (this.createdAtFilter) {
+      result = result.filter(ticket => ticket.creadoEn?.startsWith(this.createdAtFilter));
+    }
+
+    if (this.dueDateFilter) {
+      result = result.filter(ticket => ticket.fechaLimite?.startsWith(this.dueDateFilter));
+    }
+
+    if (this.sortField) {
+      result.sort((a, b) => {
+        let valueA = (a[this.sortField as keyof Ticket] ?? '') as string;
+        let valueB = (b[this.sortField as keyof Ticket] ?? '') as string;
+
+        if (this.sortField === 'prioridad') {
+          const priorityOrder: Record<string, number> = {
+            Baja: 1,
+            Media: 2,
+            Alta: 3,
+            Crítica: 4
+          };
+
+          const pA = priorityOrder[valueA] ?? 0;
+          const pB = priorityOrder[valueB] ?? 0;
+          return this.sortOrder === 'asc' ? pA - pB : pB - pA;
+        }
+
+        if (this.sortOrder === 'asc') {
+          return valueA > valueB ? 1 : valueA < valueB ? -1 : 0;
+        }
+
+        return valueA < valueB ? 1 : valueA > valueB ? -1 : 0;
+      });
+    }
+
+    return result;
+  }
+
+  get pendingTickets(): Ticket[] {
+    return this.ticketsByGroup.filter(ticket => ticket.estado === 'Pendiente');
+  }
+
+  get inProgressTickets(): Ticket[] {
+    return this.ticketsByGroup.filter(ticket => ticket.estado === 'En proceso');
+  }
+
+  get blockedTickets(): Ticket[] {
+    return this.ticketsByGroup.filter(ticket => ticket.estado === 'Cancelado');
+  }
+
+  get doneTickets(): Ticket[] {
+    return this.ticketsByGroup.filter(ticket => ticket.estado === 'Resuelto');
+  }
+
+  get pendingCount(): number {
+    return this.pendingTickets.length;
+  }
+
+  get inProgressCount(): number {
+    return this.inProgressTickets.length;
+  }
+
+  get blockedCount(): number {
+    return this.blockedTickets.length;
+  }
+
+  get doneCount(): number {
+    return this.doneTickets.length;
+  }
+
+  get totalTicketsCount(): number {
+    return this.ticketsByGroup.length;
+  }
+
+  get isTicketCreator(): boolean {
+    if (!this.selectedTicket || !this.currentUser) return false;
+    return String(this.selectedTicket.autorId) === String(this.currentUser.id);
+  }
+
+  get canOnlyEditStatusAndComment(): boolean {
+    if (!this.selectedTicket || !this.currentUser) return false;
+
+    const isMemberOfGroup = !!this.selectedGroup?.memberIds.some(
+      memberId => String(memberId) === String(this.currentUser?.id)
+    );
+
+    return isMemberOfGroup && !this.isTicketCreator;
+  }
+
+  get canEditAllTicketFields(): boolean {
+    return this.isTicketCreator;
+  }
+
+  private normalizeStatus(status: string): string {
+    const value = status.trim().toLowerCase();
+
+    if (value === 'pendiente') return 'Pendiente';
+    if (value === 'en proceso') return 'En proceso';
+    if (value === 'resuelto') return 'Resuelto';
+    if (value === 'cancelado') return 'Cancelado';
+
+    return status;
+  }
+
+  private normalizePriority(priority: string): string {
+    const value = priority.trim().toLowerCase();
+
+    if (value === 'baja') return 'Baja';
+    if (value === 'media') return 'Media';
+    if (value === 'alta') return 'Alta';
+    if (value === 'crítica' || value === 'critica') return 'Crítica';
+
+    return priority;
+  }
+
+  loadTicketsByGroup(): void {
+    if (!this.groupId) return;
+
+    this.ticketService.getTicketsByGroup(this.groupId).subscribe({
+      next: (response) => {
+        this.tickets = response.data.map((ticket: TicketApi) => {
+          const prioridadNombre = this.normalizePriority(ticket.prioridad_nombre || '');
+          if (prioridadNombre && ticket.prioridad_id) {
+            this.priorityCatalog[prioridadNombre] = ticket.prioridad_id;
+          }
+
+          return {
+            id: ticket.id,
+            titulo: ticket.titulo,
+            descripcion: ticket.descripcion,
+            estado: this.normalizeStatus(ticket.estado_nombre || ticket.estado_id),
+            estadoId: ticket.estado_id,
+            asignadoA: ticket.asignado_username || 'Sin asignar',
+            asignadoId: ticket.asignado_id || null,
+            prioridad: prioridadNombre || ticket.prioridad_id,
+            prioridadId: ticket.prioridad_id,
+            creadoEn: ticket.creado_en,
+            fechaLimite: ticket.fecha_limite || '',
+            fechaFinal: ticket.fecha_final,
+            grupoId: ticket.grupo_id,
+            autorId: ticket.autor_id,
+            autorNombre: ticket.autor_username || 'Usuario',
+            comments: [],
+            history: []
+          };
+        });
+      },
+      error: (error) => {
+        console.error('Error al cargar tickets:', error);
+        this.tickets = [];
+        this.msg.add({
+          severity: 'error',
+          summary: 'Error',
+          detail: 'No se pudieron cargar los tickets del grupo.'
+        });
+      }
+    });
+  }
 
   private loadCurrentUser(): void {
     const raw = localStorage.getItem(CURRENT_USER_KEY);
@@ -227,138 +459,55 @@ this.tickets = (savedTickets ?? []).map(ticket => ({
     }
   }
 
-  private getTickets(): Ticket[] | null {
-    const raw = localStorage.getItem(TICKETS_KEY);
+  private getUsers(): AppUser[] | null {
+    const raw = localStorage.getItem(USERS_KEY);
     if (!raw) return null;
 
     try {
-      return JSON.parse(raw) as Ticket[];
+      return JSON.parse(raw) as AppUser[];
     } catch {
       return null;
     }
   }
 
-  private saveTickets(): void {
-    localStorage.setItem(TICKETS_KEY, JSON.stringify(this.tickets));
+  private loadUsers(): void {
+    this.users = this.getUsers() ?? [];
   }
 
-  get selectedGroup(): GroupInfo | undefined {
-    return this.groups.find(group => group.id === this.groupId);
+  private getGroups(): GroupInfo[] | null {
+    const raw = localStorage.getItem(GROUPS_KEY);
+    if (!raw) return null;
+
+    try {
+      return JSON.parse(raw) as GroupInfo[];
+    } catch {
+      return null;
+    }
   }
 
-  get ticketsByGroup(): Ticket[] {
-    return this.tickets.filter(ticket => ticket.groupId === this.groupId);
-  }
-
-  get filteredTicketsByGroup(): Ticket[] {
-    let result = [...this.ticketsByGroup];
-
-    if (this.statusFilter) {
-      result = result.filter(ticket => ticket.status === this.statusFilter);
-    }
-
-    if (this.priorityFilter) {
-      result = result.filter(ticket => ticket.priority === this.priorityFilter);
-    }
-
-    if (this.createdAtFilter) {
-      result = result.filter(ticket => ticket.createdAt === this.createdAtFilter);
-    }
-
-    if (this.dueDateFilter) {
-      result = result.filter(ticket => ticket.dueDate === this.dueDateFilter);
-    }
-
-    if (this.sortField) {
-      result.sort((a, b) => {
-        let valueA: string | number = a[this.sortField as keyof Ticket] as string | number;
-        let valueB: string | number = b[this.sortField as keyof Ticket] as string | number;
-
-        if (this.sortField === 'priority') {
-          const priorityOrder: Record<string, number> = {
-            Baja: 1,
-            Media: 2,
-            Alta: 3
-          };
-          valueA = priorityOrder[valueA as string];
-          valueB = priorityOrder[valueB as string];
-        }
-
-        if (this.sortOrder === 'asc') {
-          return valueA > valueB ? 1 : valueA < valueB ? -1 : 0;
-        }
-
-        return valueA < valueB ? 1 : valueA > valueB ? -1 : 0;
+  loadGroups(): void {
+  this.groupService.getAll().subscribe({
+    next: (response) => {
+      this.groups = (response.data ?? []).map((group: any) => ({
+        id: group.id,
+        name: group.nombre,
+        level: group.nivel,
+        author: group.autor,
+        description: group.descripcion,
+        memberIds: (group.members ?? []).map((member: any) => member.id)
+      }));
+    },
+    error: (error) => {
+      console.error('Error al cargar grupos:', error);
+      this.groups = [];
+      this.msg.add({
+        severity: 'error',
+        summary: 'Error',
+        detail: 'No se pudieron cargar los grupos.'
       });
     }
-
-    return result;
-  }
-
-  get pendingTickets(): Ticket[] {
-    return this.ticketsByGroup.filter(ticket => ticket.status === 'Pendiente');
-  }
-
-  get inProgressTickets(): Ticket[] {
-    return this.ticketsByGroup.filter(ticket => ticket.status === 'En progreso');
-  }
-
-  get reviewTickets(): Ticket[] {
-    return this.ticketsByGroup.filter(ticket => ticket.status === 'Revisión');
-  }
-
-  get doneTickets(): Ticket[] {
-    return this.ticketsByGroup.filter(ticket => ticket.status === 'Finalizado');
-  }
-
-  get canCreateTickets(): boolean {
-    return !!this.currentUser?.permissions.canCreateTickets;
-  }
-
-  get canEditTickets(): boolean {
-    return !!this.currentUser?.permissions.canEditTickets;
-  }
-
-  get canViewTicketDetail(): boolean {
-    return !!this.currentUser?.permissions.canViewTicketDetail;
-  }
-  
-
-  showNoPermission(action: string): void {
-    this.msg.add({
-      severity: 'warn',
-      summary: 'Sin permiso',
-      detail: `No tienes permiso para ${action}.`
-    });
-  }
-
-  handleNewTicket(): void {
-    if (!this.canCreateTickets) {
-      this.showNoPermission('crear tickets');
-      return;
-    }
-
-    this.openNewTicket();
-  }
-
-  handleEditTicket(ticket: Ticket): void {
-    if (!this.canEditTickets) {
-      this.showNoPermission('editar tickets');
-      return;
-    }
-
-    this.editTicket(ticket);
-  }
-
-  handleTicketDetail(ticket: Ticket): void {
-    if (!this.canViewTicketDetail) {
-      this.showNoPermission('ver el detalle del ticket');
-      return;
-    }
-
-    this.openTicketDetail(ticket);
-  }
-
+  });
+}
   clearFilters(): void {
     this.statusFilter = '';
     this.priorityFilter = '';
@@ -394,15 +543,15 @@ this.tickets = (savedTickets ?? []).map(ticket => ({
   editTicket(ticket: Ticket): void {
     this.submitted = false;
     this.editingTicketId = ticket.id;
-    this.currentCreatedAt = ticket.createdAt;
+    this.currentCreatedAt = ticket.creadoEn?.split('T')[0] || '';
 
     this.ticketForm.reset({
-      title: ticket.title,
-      description: ticket.description,
-      status: ticket.status,
-      assignedTo: ticket.assignedTo,
-      priority: ticket.priority,
-      dueDate: ticket.dueDate,
+      title: ticket.titulo,
+      description: ticket.descripcion,
+      status: ticket.estado,
+      assignedTo: ticket.asignadoId || '',
+      priority: ticket.prioridad,
+      dueDate: ticket.fechaLimite,
       comment: ''
     });
 
@@ -410,117 +559,51 @@ this.tickets = (savedTickets ?? []).map(ticket => ({
   }
 
   openTicketDetail(ticket: Ticket): void {
-  this.selectedTicket = ticket;
+  this.selectedTicket = {
+    ...ticket,
+    history: []
+  };
+
   this.submitted = false;
 
   this.ticketForm.reset({
-    title: ticket.title,
-    description: ticket.description,
-    status: ticket.status,
-    assignedTo: ticket.assignedTo,
-    priority: ticket.priority,
-    dueDate: ticket.dueDate,
+    title: ticket.titulo,
+    description: ticket.descripcion,
+    status: ticket.estado,
+    assignedTo: ticket.asignadoId || '',
+    priority: ticket.prioridad,
+    dueDate: ticket.fechaLimite,
     comment: ''
   });
 
-  this.currentCreatedAt = ticket.createdAt;
+  this.currentCreatedAt = ticket.creadoEn?.split('T')[0] || '';
 
-  if (this.isTicketCreator) {
-    this.ticketForm.enable();
-  } else if (this.canOnlyEditStatusAndComment) {
-    this.ticketForm.enable();
+  this.ticketForm.enable();
 
+  if (!this.canEditAllTicketFields) {
     this.ticketForm.get('title')?.disable();
     this.ticketForm.get('description')?.disable();
     this.ticketForm.get('assignedTo')?.disable();
     this.ticketForm.get('priority')?.disable();
     this.ticketForm.get('dueDate')?.disable();
-  } else {
-    this.ticketForm.disable();
   }
+
+  this.loadTicketHistory(ticket.id);
 
   this.detailDialogVisible = true;
 }
 
-  private buildHistoryChanges(oldTicket: Ticket, formValue: {
-  title: string;
-  description: string;
-  status: Ticket['status'];
-  assignedTo: string;
-  priority: Ticket['priority'];
-  dueDate: string;
-  comment: string;
-}): TicketHistory[] {
-  const changes: TicketHistory[] = [];
-  const now = new Date().toLocaleString();
-  const currentUserName =
-    this.currentUser?.fullName || this.currentUser?.username || 'Usuario';
-
-  if (oldTicket.title !== formValue.title) {
-    changes.push({
-      date: now,
-      action: 'Cambio de título',
-      detail: `De "${oldTicket.title}" a "${formValue.title}"`,
-      user: currentUserName
-    });
+  handleNewTicket(): void {
+    this.openNewTicket();
   }
 
-  if (oldTicket.description !== formValue.description) {
-    changes.push({
-      date: now,
-      action: 'Cambio de descripción',
-      detail: 'Se actualizó la descripción del ticket',
-      user: currentUserName
-    });
+  handleEditTicket(ticket: Ticket): void {
+    this.editTicket(ticket);
   }
 
-  if (oldTicket.status !== formValue.status) {
-    changes.push({
-      date: now,
-      action: 'Cambio de estado',
-      detail: `De "${oldTicket.status}" a "${formValue.status}"`,
-      user: currentUserName
-    });
+  handleTicketDetail(ticket: Ticket): void {
+    this.openTicketDetail(ticket);
   }
-
-  if (oldTicket.assignedTo !== formValue.assignedTo) {
-    changes.push({
-      date: now,
-      action: 'Cambio de asignado',
-      detail: `De "${oldTicket.assignedTo}" a "${formValue.assignedTo}"`,
-      user: currentUserName
-    });
-  }
-
-  if (oldTicket.priority !== formValue.priority) {
-    changes.push({
-      date: now,
-      action: 'Cambio de prioridad',
-      detail: `De "${oldTicket.priority}" a "${formValue.priority}"`,
-      user: currentUserName
-    });
-  }
-
-  if (oldTicket.dueDate !== formValue.dueDate) {
-    changes.push({
-      date: now,
-      action: 'Cambio de fecha límite',
-      detail: `De "${oldTicket.dueDate}" a "${formValue.dueDate}"`,
-      user: currentUserName
-    });
-  }
-
-  if (formValue.comment && formValue.comment.trim()) {
-    changes.push({
-      date: now,
-      action: 'Comentario agregado',
-      detail: formValue.comment,
-      user: currentUserName
-    });
-  }
-
-  return changes;
-}
 
   saveTicket(): void {
     this.submitted = true;
@@ -537,266 +620,325 @@ this.tickets = (savedTickets ?? []).map(ticket => ({
     const value = this.ticketForm.getRawValue() as {
       title: string;
       description: string;
-      status: Ticket['status'];
+      status: string;
       assignedTo: string;
-      priority: Ticket['priority'];
+      priority: string;
       dueDate: string;
       comment: string;
     };
 
-    if (this.editingTicketId === null) {
-      if (!this.canCreateTickets) {
-        this.showNoPermission('crear tickets');
-        return;
-      }
+    const estado_id = this.statusCatalog[value.status];
+    const prioridad_id = this.priorityCatalog[value.priority];
 
-      const newId = this.tickets.length ? Math.max(...this.tickets.map(t => t.id)) + 1 : 1;
-
-      const newTicket: Ticket = {
-  id: newId,
-  title: value.title,
-  description: value.description,
-  status: value.status,
-  assignedTo: value.assignedTo,
-  priority: value.priority,
-  createdAt: this.currentCreatedAt,
-  dueDate: value.dueDate,
-  comments: value.comment ? [value.comment] : [],
-  groupId: this.groupId,
-  createdBy: this.currentUser?.fullName || this.currentUser?.username || 'Usuario',
-  createdById: this.currentUser?.id || 0,
-  history: [
-    {
-      date: new Date().toLocaleString(),
-      action: 'Creación',
-      detail: 'Se creó el ticket',
-      user: 'Admin'
-    },
-    ...(value.comment
-      ? [
-          {
-            date: new Date().toLocaleString(),
-            action: 'Comentario agregado',
-            detail: value.comment,
-            user: 'Admin'
-          }
-        ]
-      : [])
-  ]
-};
-
-      this.tickets = [newTicket, ...this.tickets];
-      this.saveTickets();
-
+    if (!estado_id) {
       this.msg.add({
-        severity: 'success',
-        summary: 'Creado',
-        detail: 'Ticket creado correctamente.'
+        severity: 'error',
+        summary: 'Error',
+        detail: `No se encontró el ID del estado "${value.status}".`
+      });
+      return;
+    }
+
+    if (!prioridad_id) {
+      this.msg.add({
+        severity: 'error',
+        summary: 'Error',
+        detail: `No se encontró el ID de la prioridad "${value.priority}". Pon sus IDs reales en priorityCatalog.`
+      });
+      return;
+    }
+
+    if (!this.editingTicketId) {
+      this.ticketService.createTicket({
+        grupo_id: this.groupId,
+        titulo: value.title,
+        descripcion: value.description,
+        asignado_id: value.assignedTo || null,
+        estado_id,
+        prioridad_id,
+        fecha_limite: value.dueDate || null
+      }).subscribe({
+        next: () => {
+          this.dialogVisible = false;
+          this.msg.add({
+            severity: 'success',
+            summary: 'Creado',
+            detail: 'Ticket creado correctamente.'
+          });
+          this.loadTicketsByGroup();
+        },
+        error: (error) => {
+          console.error('Error al crear ticket:', error);
+          this.msg.add({
+            severity: 'error',
+            summary: 'Error',
+            detail: 'No se pudo crear el ticket.'
+          });
+        }
+      });
+
+      return;
+    }
+
+    const ticket = this.tickets.find(t => t.id === this.editingTicketId);
+    if (!ticket) return;
+
+    const update$ = this.ticketService.updateTicket(ticket.id, {
+      titulo: value.title,
+      descripcion: value.description,
+      asignado_id: value.assignedTo || null,
+      prioridad_id,
+      fecha_limite: value.dueDate || null
+    });
+
+    const statusChanged = value.status !== ticket.estado;
+
+    if (statusChanged) {
+      forkJoin([
+        update$,
+        this.ticketService.changeTicketStatus(ticket.id, {
+          estado_id,
+          fecha_final: value.status === 'Resuelto' ? new Date().toISOString() : null
+        })
+      ]).subscribe({
+        next: () => {
+          this.dialogVisible = false;
+          this.editingTicketId = null;
+          this.msg.add({
+            severity: 'success',
+            summary: 'Actualizado',
+            detail: 'Ticket actualizado correctamente.'
+          });
+          this.loadTicketsByGroup();
+        },
+        error: (error) => {
+          console.error('Error al actualizar ticket:', error);
+          this.msg.add({
+            severity: 'error',
+            summary: 'Error',
+            detail: 'No se pudo actualizar el ticket.'
+          });
+        }
       });
     } else {
-      if (!this.canEditTickets) {
-        this.showNoPermission('editar tickets');
-        return;
+      update$.subscribe({
+        next: () => {
+          this.dialogVisible = false;
+          this.editingTicketId = null;
+          this.msg.add({
+            severity: 'success',
+            summary: 'Actualizado',
+            detail: 'Ticket actualizado correctamente.'
+          });
+          this.loadTicketsByGroup();
+        },
+        error: (error) => {
+          console.error('Error al actualizar ticket:', error);
+          this.msg.add({
+            severity: 'error',
+            summary: 'Error',
+            detail: 'No se pudo actualizar el ticket.'
+          });
+        }
+      });
+    }
+  }
+
+  saveTicketDetail(): void {
+    if (!this.selectedTicket) return;
+
+    this.submitted = true;
+
+    if (this.ticketForm.invalid) {
+      this.msg.add({
+        severity: 'error',
+        summary: 'Error',
+        detail: 'Completa el formulario correctamente.'
+      });
+      return;
+    }
+
+    const value = this.ticketForm.getRawValue() as {
+      title: string;
+      description: string;
+      status: string;
+      assignedTo: string;
+      priority: string;
+      dueDate: string;
+      comment: string;
+    };
+
+    const estado_id = this.statusCatalog[value.status];
+    const prioridad_id = this.priorityCatalog[value.priority];
+
+    if (!estado_id) {
+      this.msg.add({
+        severity: 'error',
+        summary: 'Error',
+        detail: `No se encontró el ID del estado "${value.status}".`
+      });
+      return;
+    }
+
+    if (this.canEditAllTicketFields) {
+      const update$ = this.ticketService.updateTicket(this.selectedTicket.id, {
+        titulo: value.title,
+        descripcion: value.description,
+        asignado_id: value.assignedTo || null,
+        prioridad_id,
+        fecha_limite: value.dueDate || null
+      });
+
+      const statusChanged = value.status !== this.selectedTicket.estado;
+
+      if (statusChanged) {
+        forkJoin([
+          update$,
+          this.ticketService.changeTicketStatus(this.selectedTicket.id, {
+            estado_id,
+            fecha_final: value.status === 'Resuelto' ? new Date().toISOString() : null
+          })
+        ]).subscribe({
+          next: () => {
+            this.detailDialogVisible = false;
+            this.selectedTicket = null;
+            this.msg.add({
+              severity: 'success',
+              summary: 'Actualizado',
+              detail: 'Ticket actualizado correctamente.'
+            });
+            this.loadTicketsByGroup();
+          },
+          error: (error) => {
+            console.error('Error al guardar detalle:', error);
+            this.msg.add({
+              severity: 'error',
+              summary: 'Error',
+              detail: 'No se pudo actualizar el ticket.'
+            });
+          }
+        });
+      } else {
+        update$.subscribe({
+          next: () => {
+            this.detailDialogVisible = false;
+            this.selectedTicket = null;
+            this.msg.add({
+              severity: 'success',
+              summary: 'Actualizado',
+              detail: 'Ticket actualizado correctamente.'
+            });
+            this.loadTicketsByGroup();
+          },
+          error: (error) => {
+            console.error('Error al guardar detalle:', error);
+            this.msg.add({
+              severity: 'error',
+              summary: 'Error',
+              detail: 'No se pudo actualizar el ticket.'
+            });
+          }
+        });
       }
 
-      this.tickets = this.tickets.map(ticket => {
-        if (ticket.id !== this.editingTicketId) return ticket;
+      return;
+    }
 
-        const changes = this.buildHistoryChanges(ticket, value);
-
-        return {
-          ...ticket,
-          title: value.title,
-          description: value.description,
-          status: value.status,
-          assignedTo: value.assignedTo,
-          priority: value.priority,
-          dueDate: value.dueDate,
-          comments: value.comment ? [...ticket.comments, value.comment] : ticket.comments,
-          history: [...changes, ...ticket.history]
-        };
+    if (this.canOnlyEditStatusAndComment) {
+      this.ticketService.changeTicketStatus(this.selectedTicket.id, {
+        estado_id,
+        fecha_final: value.status === 'Resuelto' ? new Date().toISOString() : null
+      }).subscribe({
+        next: () => {
+          this.detailDialogVisible = false;
+          this.selectedTicket = null;
+          this.msg.add({
+            severity: 'success',
+            summary: 'Actualizado',
+            detail: 'Estado del ticket actualizado correctamente.'
+          });
+          this.loadTicketsByGroup();
+        },
+        error: (error) => {
+          console.error('Error al cambiar estado:', error);
+          this.msg.add({
+            severity: 'error',
+            summary: 'Error',
+            detail: 'No se pudo actualizar el estado del ticket.'
+          });
+        }
       });
 
-      this.saveTickets();
+      return;
+    }
 
+    this.msg.add({
+      severity: 'warn',
+      summary: 'Sin permiso',
+      detail: 'No tienes permiso para editar este ticket.'
+    });
+  }
+
+  dropTicket(event: CdkDragDrop<Ticket[]>, newStatus: string): void {
+    if (event.previousContainer === event.container) {
+      return;
+    }
+
+    const movedTicket = event.previousContainer.data[event.previousIndex];
+    if (!movedTicket) return;
+
+    const estado_id = this.statusCatalog[newStatus];
+
+    if (!estado_id) {
       this.msg.add({
-        severity: 'success',
-        summary: 'Actualizado',
-        detail: 'Ticket actualizado correctamente.'
+        severity: 'error',
+        summary: 'Error',
+        detail: `No se encontró el estado "${newStatus}".`
       });
+      return;
     }
 
-    this.dialogVisible = false;
-    this.editingTicketId = null;
-  }
-
-  get pendingCount(): number {
-  return this.pendingTickets.length;
-}
-
-get inProgressCount(): number {
-  return this.inProgressTickets.length;
-}
-
-get reviewCount(): number {
-  return this.reviewTickets.length;
-}
-
-get doneCount(): number {
-  return this.doneTickets.length;
-}
-
-get totalTicketsCount(): number {
-  return this.ticketsByGroup.length;
-}
-
-get isTicketCreator(): boolean {
-  if (!this.selectedTicket || !this.currentUser) return false;
-  return this.selectedTicket.createdById === this.currentUser.id;
-}
-
-get canOnlyEditStatusAndComment(): boolean {
-  if (!this.selectedTicket || !this.currentUser) return false;
-
-  const isMemberOfGroup = !!this.selectedGroup?.memberIds.includes(this.currentUser.id);
-  return isMemberOfGroup && !this.isTicketCreator;
-}
-
-get canEditAllTicketFields(): boolean {
-  return this.isTicketCreator;
-}
-
-dropTicket(
-  event: CdkDragDrop<Ticket[]>,
-  newStatus: Ticket['status']
-): void {
-  if (event.previousContainer === event.container) {
-    return;
-  }
-
-  const movedTicket = event.previousContainer.data[event.previousIndex];
-
-  if (!movedTicket) return;
-
-  // si quieres, aquí puedes validar permiso para cambiar estado
- const isMemberOfGroup = !!this.selectedGroup?.memberIds.includes(this.currentUser?.id || 0);
-
-if (!isMemberOfGroup) {
-  this.showNoPermission('mover tickets entre columnas');
-  return;
-}
-
-  movedTicket.status = newStatus;
-
-  movedTicket.history = [
-    {
-      date: new Date().toLocaleString(),
-      action: 'Cambio de estado',
-      detail: `Movido a "${newStatus}" desde Kanban`,
-      user: this.currentUser?.fullName || this.currentUser?.username || 'Usuario'
-    },
-    ...movedTicket.history
-  ];
-
-  this.saveTickets();
-}
-
-
-saveTicketDetail(): void {
-  if (!this.selectedTicket) return;
-
-  const ticket = this.selectedTicket;
-  const rawValue = this.ticketForm.getRawValue() as {
-    title: string;
-    description: string;
-    status: Ticket['status'];
-    assignedTo: string;
-    priority: Ticket['priority'];
-    dueDate: string;
-    comment: string;
-  };
-
-  const now = new Date().toLocaleString();
-  const currentUserName =
-    this.currentUser?.fullName || this.currentUser?.username || 'Usuario';
-
-  if (this.isTicketCreator) {
-    const changes = this.buildHistoryChanges(ticket, rawValue);
-
-    this.tickets = this.tickets.map(t =>
-      t.id === ticket.id
-        ? {
-            ...t,
-            title: rawValue.title,
-            description: rawValue.description,
-            status: rawValue.status,
-            assignedTo: rawValue.assignedTo,
-            priority: rawValue.priority,
-            dueDate: rawValue.dueDate,
-            comments: rawValue.comment ? [...t.comments, rawValue.comment] : t.comments,
-            history: [...changes, ...t.history]
-          }
-        : t
-    );
-
-    this.saveTickets();
-    this.selectedTicket = this.tickets.find(t => t.id === ticket.id) || null;
-    this.detailDialogVisible = false;
-
-    this.msg.add({
-      severity: 'success',
-      summary: 'Actualizado',
-      detail: 'Ticket actualizado correctamente.'
+    this.ticketService.changeTicketStatus(movedTicket.id, {
+      estado_id,
+      fecha_final: newStatus === 'Resuelto' ? new Date().toISOString() : null
+    }).subscribe({
+      next: () => {
+        this.msg.add({
+          severity: 'success',
+          summary: 'Actualizado',
+          detail: `El ticket se movió a "${newStatus}".`
+        });
+        this.loadTicketsByGroup();
+      },
+      error: (error) => {
+        console.error('Error al mover ticket:', error);
+        this.msg.add({
+          severity: 'error',
+          summary: 'Error',
+          detail: 'No se pudo actualizar el estado del ticket.'
+        });
+      }
     });
-
-    return;
   }
 
-  if (this.canOnlyEditStatusAndComment) {
-    const changes: TicketHistory[] = [];
-
-    if (ticket.status !== rawValue.status) {
-      changes.push({
-        date: now,
-        action: 'Cambio de estado',
-        detail: `De "${ticket.status}" a "${rawValue.status}"`,
-        user: currentUserName
-      });
-    }
-
-    if (rawValue.comment && rawValue.comment.trim()) {
-      changes.push({
-        date: now,
-        action: 'Comentario agregado',
-        detail: rawValue.comment,
-        user: currentUserName
-      });
-    }
-
-    this.tickets = this.tickets.map(t =>
-      t.id === ticket.id
-        ? {
-            ...t,
-            status: rawValue.status,
-            comments: rawValue.comment ? [...t.comments, rawValue.comment] : t.comments,
-            history: [...changes, ...t.history]
-          }
-        : t
-    );
-
-    this.saveTickets();
-    this.selectedTicket = this.tickets.find(t => t.id === ticket.id) || null;
-    this.detailDialogVisible = false;
-
-    this.msg.add({
-      severity: 'success',
-      summary: 'Actualizado',
-      detail: 'Se actualizó el estado y/o comentario del ticket.'
+  deleteTicket(ticketId: string): void {
+    this.ticketService.deleteTicket(ticketId).subscribe({
+      next: () => {
+        this.msg.add({
+          severity: 'success',
+          summary: 'Eliminado',
+          detail: 'Ticket eliminado correctamente.'
+        });
+        this.loadTicketsByGroup();
+      },
+      error: (error) => {
+        console.error('Error al eliminar ticket:', error);
+        this.msg.add({
+          severity: 'error',
+          summary: 'Error',
+          detail: 'No se pudo eliminar el ticket.'
+        });
+      }
     });
-
-    return;
   }
-
-  this.showNoPermission('editar este ticket');
-}
 }

@@ -1,65 +1,61 @@
-<aside class="logo">
+<aside class="sidebar-container">
   <div class="brand">
     <div class="logo">{{ appName }}</div>
+    <span class="title">Menú</span>
   </div>
 
-  <div class="sidebar">
-    <div class="brand">
-      <span class="title">Menú</span>
-    </div>
+  <div class="links">
+    <button
+      pButton
+      type="button"
+      label="Dashboard"
+      icon="pi pi-home"
+      routerLink="/home"
+      class="w-full">
+    </button>
 
-    <div class="links">
-      <button
-        pButton
-        type="button"
-        label="Dashboard"
-        icon="pi pi-home"
-        routerLink="/home"
-        class="w-full">
-      </button>
+    <button
+      *appHasPermission="'user:view'"
+      pButton
+      type="button"
+      label="Perfil"
+      icon="pi pi-user"
+      routerLink="/users"
+      class="w-full">
+    </button>
 
-      <button
-        pButton
-        type="button"
-        label="Perfil"
-        icon="pi pi-user"
-        routerLink="/users"
-        class="w-full">
-      </button>
+    <button
+      *appHasPermission="'group:add'"
+      pButton
+      type="button"
+      label="Gestión de Grupos"
+      icon="pi pi-users"
+      routerLink="/groups"
+      class="w-full">
+    </button>
 
-      <button
-        *ngIf="canManageGroups"
-        pButton
-        type="button"
-        label="Gestión de Grupos"
-        icon="pi pi-users"
-        routerLink="/groups"
-        class="w-full">
-      </button>
+    <button
+      *appHasPermission="'user:manage'"
+      pButton
+      type="button"
+      label="Gestión de Usuarios"
+      icon="pi pi-id-card"
+      routerLink="/user-management"
+      class="w-full">
+    </button>
+  </div>
 
-      <button
-        *ngIf="canManageUsers"
-        pButton
-        type="button"
-        label="Gestión de Usuarios"
-        icon="pi pi-id-card"
-        routerLink="/user-management"
-        class="w-full">
-      </button>
+  <div class="bottom">
+    <button
+      pButton
+      type="button"
+      label="Cerrar sesión"
+      icon="pi pi-sign-out"
+      severity="danger"
+      class="w-full"
+      (click)="logout()">
+    </button>
 
-      <div class="bottom">
-        <button
-          pButton
-          type="button"
-          label="Cerrar sesión"
-          icon="pi pi-sign-out"
-          severity="danger"
-          class="w-full"
-          (click)="logout()">
-        </button>
-      </div>
-
-      <div class="version">{{ version }}</div>
-    </div>
+    <div class="version">{{ version }}</div>
   </div>
 </aside>

@@ -1,3 +1,5 @@
+<p-toast></p-toast>
+
 <div style="min-height:100vh; display:flex; justify-content:center; align-items:center; padding: 24px;">
   <div style="width: 520px; max-width: 100%;">
     <h2>Registro</h2>
@@ -84,7 +86,13 @@
         </p-message>
       </div>
 
-      <button pButton type="submit" label="Registrar" severity="success" [disabled]="form.invalid"></button>
+<button
+  pButton
+  type="submit"
+  [label]="loading ? 'Registrando...' : 'Registrar'"
+  severity="success"
+  [disabled]="loading"
+></button>
 
       <div style="display:flex; justify-content:space-between;">
         <a routerLink="/">← Inicio</a>

@@ -3,7 +3,7 @@
     <div>
       <h2>Dashboard</h2>
       <p class="subtitle">
-        Bienvenido{{ currentUser ? ', ' + currentUser.fullName : '' }}
+        Bienvenido{{ displayName ? ', ' + displayName : '' }}
       </p>
     </div>
   </div>
@@ -12,7 +12,9 @@
     <div class="stat-card total">
       <div class="stat-label">Total tickets</div>
       <div class="stat-value">{{ totalTickets }}</div>
-      <div class="stat-foot">De mis grupos</div>
+      <div class="stat-foot">
+        {{ isSuperAdmin ? 'De todo el sistema' : 'De mis grupos' }}
+      </div>
     </div>
 
     <div class="stat-card pending">
@@ -40,23 +42,23 @@
     </div>
   </div>
 
-  <p-card header="Mis grupos" class="card">
-    <div *ngIf="myGroups.length === 0" class="empty-state">
+  <p-card [header]="isSuperAdmin ? 'Todos los grupos' : 'Mis grupos'" class="card">
+    <div *ngIf="visibleGroups.length === 0" class="empty-state">
       No estás asignado a ningún grupo.
     </div>
 
-    <div class="groups-grid" *ngIf="myGroups.length > 0">
-      <div class="group-card" *ngFor="let group of myGroups">
+    <div class="groups-grid" *ngIf="visibleGroups.length > 0">
+      <div class="group-card" *ngFor="let group of visibleGroups">
         <div class="group-top">
-          <h3>{{ group.name }}</h3>
+          <h3>{{ group.nombre }}</h3>
           <p-tag
-            [value]="group.level"
-            [severity]="levelSeverity(group.level)">
+            [value]="group.nivel"
+            [severity]="levelSeverity(group.nivel)">
           </p-tag>
         </div>
 
-        <p><strong>Autor:</strong> {{ group.author }}</p>
-        <p><strong>Descripción:</strong> {{ group.description }}</p>
+        <p><strong>Autor:</strong> {{ group.autor }}</p>
+        <p><strong>Descripción:</strong> {{ group.descripcion }}</p>
 
         <div class="group-actions">
           <button
@@ -72,13 +74,13 @@
     </div>
   </p-card>
 
-  <p-card header="Mis tickets asignados" class="card">
-    <div *ngIf="myAssignedTickets.length === 0" class="empty-state">
-      No tienes tickets asignados.
+  <p-card [header]="isSuperAdmin ? 'Todos los tickets' : 'Mis tickets asignados'" class="card">
+    <div *ngIf="assignedOrVisibleTickets.length === 0" class="empty-state">
+      {{ isSuperAdmin ? 'No hay tickets registrados.' : 'No tienes tickets asignados.' }}
     </div>
 
-    <div class="tickets-list" *ngIf="myAssignedTickets.length > 0">
-      <div class="ticket-item" *ngFor="let ticket of myAssignedTickets">
+    <div class="tickets-list" *ngIf="assignedOrVisibleTickets.length > 0">
+      <div class="ticket-item" *ngFor="let ticket of assignedOrVisibleTickets">
         <div class="ticket-main">
           <h4>{{ ticket.title }}</h4>
           <p><strong>Grupo:</strong> {{ getGroupName(ticket.groupId) }}</p>

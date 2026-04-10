@@ -91,7 +91,7 @@
 
         <div class="field">
           <label>Fecha nacimiento</label>
-          <input pInputText formControlName="birthDate" />
+          <input pInputText type="date" formControlName="birthDate" />
           <p-message *ngIf="isInvalid('birthDate')" severity="error" text="Requerido"></p-message>
         </div>
       </form>
@@ -128,7 +128,7 @@
       </div>
 
       <div class="tickets-section">
-        <h3>Tickets asignados a {{ currentUser.fullName }}</h3>
+        <h3>Tickets asignados a {{ currentUser?.fullName || currentUser?.username }}</h3>
 
         <div *ngIf="assignedTickets.length === 0" class="empty-state">
           No hay tickets asignados a este usuario.

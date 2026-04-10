@@ -1,3 +1,5 @@
+<p-toast></p-toast>
+
 <div style="min-height:100vh; display:flex; justify-content:center; align-items:center; padding: 24px;">
   <div style="width: 420px; max-width: 100%;">
     <h2>Iniciar sesión</h2>
@@ -5,7 +7,13 @@
     <form [formGroup]="form" (ngSubmit)="login()" style="display:flex; flex-direction:column; gap: 14px;">
       <div>
         <label>Correo</label>
-        <input pInputText type="email" formControlName="email" placeholder="admin@arp.com" style="width:100%;" />
+        <input
+          pInputText
+          type="email"
+          formControlName="email"
+          placeholder="admin@marher.com"
+          style="width:100%;"
+        />
         <p-message *ngIf="isInvalid('email')" severity="error" variant="simple" size="small">
           Correo obligatorio y válido.
         </p-message>
@@ -17,7 +25,7 @@
           formControlName="password"
           [feedback]="false"
           [toggleMask]="true"
-          placeholder="Admin@12345!"
+          placeholder="********"
           styleClass="w-full"
         ></p-password>
         <p-message *ngIf="isInvalid('password')" severity="error" variant="simple" size="small">
@@ -25,7 +33,13 @@
         </p-message>
       </div>
 
-      <button pButton type="submit" label="Entrar" severity="primary"></button>
+      <button
+        pButton
+        type="submit"
+        [label]="loading ? 'Entrando...' : 'Entrar'"
+        severity="primary"
+        [disabled]="loading"
+      ></button>
 
       <div style="display:flex; justify-content:space-between;">
         <a routerLink="/">← Inicio</a>

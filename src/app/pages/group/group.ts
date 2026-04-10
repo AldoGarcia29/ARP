@@ -1,7 +1,14 @@
-import { Component, OnInit, OnDestroy } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { FormBuilder, FormGroup, ReactiveFormsModule, Validators, FormsModule } from '@angular/forms';
+import { Component, OnInit, inject } from '@angular/core';
+import {
+  FormBuilder,
+  FormGroup,
+  ReactiveFormsModule,
+  Validators,
+  FormsModule
+} from '@angular/forms';
 import { RouterLink } from '@angular/router';
+import { HttpClient } from '@angular/common/http';
 
 import { CardModule } from 'primeng/card';
 import { TagModule } from 'primeng/tag';
@@ -9,347 +16,285 @@ import { TableModule } from 'primeng/table';
 import { ButtonModule } from 'primeng/button';
 import { DialogModule } from 'primeng/dialog';
 import { InputTextModule } from 'primeng/inputtext';
-import { SelectModule } from 'primeng/select';
 import { ToastModule } from 'primeng/toast';
 import { ConfirmDialogModule } from 'primeng/confirmdialog';
 import { MessageModule } from 'primeng/message';
+import { SelectModule } from 'primeng/select';
 
 import { MessageService, ConfirmationService } from 'primeng/api';
-import { AppUser } from '../../models/user.model';
 
-type Level = 'Beginner' | 'Intermediate' | 'Advanced';
+import {
+  GroupService,
+  GroupUser
+} from '../../services/group.service';
+import { UserService } from '../../services/user.service';
+import { environment } from '../../../environments/environment';
 
-type Ticket = {
-  id: number;
-  title: string;
-  description: string;
-  status: 'Pendiente' | 'En progreso' | 'Revisión' | 'Finalizado';
-  assignedTo: string;
-  priority: 'Baja' | 'Media' | 'Alta';
-  createdAt: string;
-  dueDate: string;
-  comments: string[];
-  groupId: number;
-  history: {
-    date: string;
-    action: string;
-    detail: string;
-    user: string;
-  }[];
-};
+import { HasPermissionDirective } from '../../directives/has-permission.directive';
+import { HasGroupPermissionDirective } from '../../directives/has-group-permission.directive';
 
-type GroupModel = {
-  id: number;
-  level: Level;
-  author: string;
-  name: string;
-  description: string;
-  memberIds: number[];
-};
 
-const GROUPS_KEY = 'arp_groups';
-const USERS_KEY = 'arp_users';
-const TICKETS_KEY = 'arp_tickets';
 const CURRENT_USER_KEY = 'arp_current_user';
+const CURRENT_PERMISSIONS_KEY = 'arp_current_permissions';
+const GLOBAL_PERMISSIONS_KEY = 'arp_global_permissions';
+const GROUP_PERMISSIONS_KEY = 'arp_group_permissions';
+
+interface UiGroup {
+  id: string;
+  name: string;
+  level: 'Beginner' | 'Intermediate' | 'Advanced';
+  author: string;
+  creatorId: string;
+  description: string;
+  members: GroupUser[];
+  ticketsCount: number;
+}
+
+interface UiMember {
+  id: string;
+  username: string;
+  email: string;
+  fullName: string;
+}
+
+interface UserOption {
+  id: string;
+  username: string;
+  email: string;
+  fullName: string;
+}
 
 @Component({
-  selector: 'app-groups-page',
+  selector: 'app-group',
   standalone: true,
-  templateUrl: './group.html',
-  styleUrls: ['./group.scss'],
   imports: [
     CommonModule,
     ReactiveFormsModule,
+    FormsModule,
+    RouterLink,
     CardModule,
     TagModule,
     TableModule,
     ButtonModule,
     DialogModule,
     InputTextModule,
-    SelectModule,
     ToastModule,
     ConfirmDialogModule,
     MessageModule,
-    RouterLink,
-    FormsModule
+    SelectModule,
+      HasPermissionDirective,
+      HasGroupPermissionDirective
   ],
-  providers: [MessageService, ConfirmationService]
+  providers: [MessageService, ConfirmationService],
+  templateUrl: './group.html',
+  styleUrl: './group.scss'
 })
-export class Group implements OnInit, OnDestroy {
-  currentUser: AppUser | null = null;
+export class Group implements OnInit {
+  private fb = inject(FormBuilder);
+  private groupService = inject(GroupService);
+  private http = inject(HttpClient);
+  private userService = inject(UserService);
+  private msg = inject(MessageService);
+  private confirm = inject(ConfirmationService);
 
-  groups: GroupModel[] = [];
-  users: AppUser[] = [];
-  tickets: Ticket[] = [];
+  form: FormGroup = this.fb.group({
+    level: ['Beginner', Validators.required],
+    author: ['', Validators.required],
+    name: ['', Validators.required],
+    description: ['', [Validators.required, Validators.minLength(10)]]
+  });
 
-  selectedUserId: number | null = null;
-
-  levels = [
-    { label: 'Beginner', value: 'Beginner' as const },
-    { label: 'Intermediate', value: 'Intermediate' as const },
-    { label: 'Advanced', value: 'Advanced' as const }
-  ];
+  groups: UiGroup[] = [];
+  visibleGroups: UiGroup[] = [];
+  total = 0;
 
   dialogVisible = false;
-  submitted = false;
-  editingId: number | null = null;
+  editingId: string | null = null;
 
-  form: FormGroup;
+  levels = [
+    { label: 'Beginner', value: 'Beginner' },
+    { label: 'Intermediate', value: 'Intermediate' },
+    { label: 'Advanced', value: 'Advanced' }
+  ];
 
-  private onUserUpdated = () => {
-    this.loadCurrentUser();
-    this.loadUsers();
-  };
+  availableUsers: UserOption[] = [];
+  selectedUserId: string | null = null;
+  currentMembers: UiMember[] = [];
 
-  constructor(
-    private fb: FormBuilder,
-    private msg: MessageService,
-    private confirm: ConfirmationService
-  ) {
-    this.form = this.fb.group({
-      level: ['Beginner', Validators.required],
-      author: ['', Validators.required],
-      name: ['', Validators.required],
-      description: ['', [Validators.required, Validators.minLength(10)]]
-    });
-  }
+  canCreateGroups = false;
+  canEditCurrentGroupMembers = false;
+
+  currentUserId: string | null = null;
+  currentUsername = '';
+  currentFullName = '';
+
+  permissions: string[] = [];
+  globalPermissions: string[] = [];
+  groupPermissionsRaw: Array<{
+    grupo_id?: string;
+    groupId?: string;
+    permissions: string[];
+  }> = [];
 
   ngOnInit(): void {
-    this.loadUsers();
-    this.seedCurrentUserIfNeeded();
-    this.loadCurrentUser();
-    this.seedGroupsIfNeeded();
-    this.loadTickets();
+    this.loadAuthData();
+    this.resolvePermissions();
     this.loadGroups();
-
-    window.addEventListener('arp-user-updated', this.onUserUpdated);
-
-    console.log('currentUser:', this.currentUser);
-    console.log('groups:', this.groups);
-    console.log('visibleGroups:', this.visibleGroups);
-    console.log('canCreateGroups:', this.canCreateGroups);
+    this.loadUsers();
   }
 
-  ngOnDestroy(): void {
-    window.removeEventListener('arp-user-updated', this.onUserUpdated);
-  }
+  private loadAuthData(): void {
+    const rawUser = localStorage.getItem(CURRENT_USER_KEY);
+    const rawPermissions = localStorage.getItem(CURRENT_PERMISSIONS_KEY);
+    const rawGlobalPermissions = localStorage.getItem(GLOBAL_PERMISSIONS_KEY);
+    const rawGroupPermissions = localStorage.getItem(GROUP_PERMISSIONS_KEY);
 
-  private seedCurrentUserIfNeeded(): void {
-    const rawCurrentUser = localStorage.getItem(CURRENT_USER_KEY);
-    if (rawCurrentUser) return;
-
-    const rawUsers = localStorage.getItem(USERS_KEY);
-    if (!rawUsers) return;
-
-    try {
-      const parsedUsers = JSON.parse(rawUsers) as AppUser[];
-
-      if (Array.isArray(parsedUsers) && parsedUsers.length > 0) {
-        localStorage.setItem(CURRENT_USER_KEY, JSON.stringify(parsedUsers[0]));
+    if (rawUser) {
+      try {
+        const user = JSON.parse(rawUser);
+        this.currentUserId = user?.id ?? null;
+        this.currentUsername = user?.username ?? '';
+        this.currentFullName =
+          user?.nombre_completo ?? user?.fullName ?? user?.username ?? '';
+      } catch {
+        this.currentUserId = null;
+        this.currentUsername = '';
+        this.currentFullName = '';
       }
-    } catch {
-      // no hacer nada
     }
-  }
 
-  private seedGroupsIfNeeded(): void {
-    const raw = localStorage.getItem(GROUPS_KEY);
-    if (raw) return;
-
-    const defaultGroups: GroupModel[] = [
-      {
-        id: 1,
-        level: 'Beginner',
-        author: 'Aldo Jair Garcia Pacheco',
-        name: 'ARP Starter',
-        description: 'Grupo de práctica inicial.',
-        memberIds: [1, 2]
-      },
-      {
-        id: 2,
-        level: 'Advanced',
-        author: 'Fernanda López',
-        name: 'ARP Advanced',
-        description: 'Seguimiento avanzado de tickets y métricas.',
-        memberIds: [3, 4]
+    if (rawPermissions) {
+      try {
+        this.permissions = JSON.parse(rawPermissions) || [];
+      } catch {
+        this.permissions = [];
       }
-    ];
+    }
 
-    localStorage.setItem(GROUPS_KEY, JSON.stringify(defaultGroups));
+    if (rawGlobalPermissions) {
+      try {
+        this.globalPermissions = JSON.parse(rawGlobalPermissions) || [];
+      } catch {
+        this.globalPermissions = [];
+      }
+    }
+
+    if (rawGroupPermissions) {
+      try {
+        this.groupPermissionsRaw = JSON.parse(rawGroupPermissions) || [];
+      } catch {
+        this.groupPermissionsRaw = [];
+      }
+    }
   }
 
-  private loadCurrentUser(): void {
-    const raw = localStorage.getItem(CURRENT_USER_KEY);
-
-    if (!raw) {
-      this.currentUser = null;
-      return;
-    }
-
-    try {
-      const parsed = JSON.parse(raw) as AppUser;
-      this.currentUser = parsed && typeof parsed.id === 'number' ? parsed : null;
-    } catch {
-      this.currentUser = null;
-    }
+  private resolvePermissions(): void {
+    this.canCreateGroups = this.hasAnyPermission([
+      'group:add',
+      'group:create',
+      'group:manage'
+    ]);
   }
 
   private loadGroups(): void {
-    const raw = localStorage.getItem(GROUPS_KEY);
+    this.groupService.getAll().subscribe({
+      next: (resp) => {
+        const list = this.extractArray(resp?.data);
+        this.groups = list.map((g: any) => this.mapGroup(g));
+        this.visibleGroups = [...this.groups];
+        this.total = this.groups.length;
+      },
+      error: () => {
+        this.groups = [];
+        this.visibleGroups = [];
+        this.total = 0;
 
-    if (!raw) {
-      this.groups = [];
-      return;
-    }
-
-    try {
-      const parsed = JSON.parse(raw) as GroupModel[];
-      this.groups = Array.isArray(parsed) ? parsed : [];
-    } catch {
-      this.groups = [];
-    }
-  }
-
-  private saveGroups(): void {
-    localStorage.setItem(GROUPS_KEY, JSON.stringify(this.groups));
-  }
-
-  private loadUsers(): void {
-    const raw = localStorage.getItem(USERS_KEY);
-
-    if (!raw) {
-      this.users = [];
-      return;
-    }
-
-    try {
-      const parsed = JSON.parse(raw) as AppUser[];
-      this.users = Array.isArray(parsed) ? parsed : [];
-    } catch {
-      this.users = [];
-    }
-  }
-
-  private loadTickets(): void {
-    const raw = localStorage.getItem(TICKETS_KEY);
-
-    if (!raw) {
-      this.tickets = [];
-      return;
-    }
-
-    try {
-      const parsed = JSON.parse(raw) as Ticket[];
-      this.tickets = Array.isArray(parsed) ? parsed : [];
-    } catch {
-      this.tickets = [];
-    }
-  }
-
-  get isLoggedIn(): boolean {
-    return !!this.currentUser;
-  }
-
-  get canCreateGroups(): boolean {
-    return !!this.currentUser?.permissions?.canCreateGroup;
-  }
-
-  canEditGroupPermission(group: GroupModel | undefined): boolean {
-    if (!group || !this.currentUser) return false;
-    return !!this.currentUser.permissions?.canEditGroup;
-  }
-
-  canDeleteGroupPermission(group: GroupModel | undefined): boolean {
-    if (!group || !this.currentUser) return false;
-    return !!this.currentUser.permissions?.canDeleteGroup;
-  }
-
-  canAddMembersPermission(group: GroupModel | undefined): boolean {
-    if (!group || !this.currentUser) return false;
-    return !!this.currentUser.permissions?.canAddMembers;
-  }
-
-  canRemoveMembersPermission(group: GroupModel | undefined): boolean {
-    if (!group || !this.currentUser) return false;
-    return !!this.currentUser.permissions?.canRemoveMembers;
-  }
-
-  get canEditCurrentGroupMembers(): boolean {
-    return !!this.editingGroup && (
-      this.canAddMembersPermission(this.editingGroup) ||
-      this.canRemoveMembersPermission(this.editingGroup)
-    );
-  }
-
-  get visibleGroups(): GroupModel[] {
-    if (!this.currentUser?.id) return [];
-
-    return this.groups.filter(group =>
-      Array.isArray(group.memberIds) && group.memberIds.includes(this.currentUser!.id)
-    );
-  }
-
-  get total(): number {
-    return this.visibleGroups.length;
-  }
-
-  levelSeverity(level: Level): 'success' | 'warn' | 'danger' {
-    if (level === 'Advanced') return 'danger';
-    if (level === 'Intermediate') return 'warn';
-    return 'success';
-  }
-
-  isInvalid(name: string): boolean {
-    const c = this.form.get(name);
-    return !!c && c.invalid && (c.touched || this.submitted);
-  }
-
-  get editingGroup(): GroupModel | undefined {
-    return this.groups.find(g => g.id === this.editingId);
-  }
-
-  get currentMemberIds(): number[] {
-    return this.editingGroup?.memberIds ?? [];
-  }
-
-  get currentMembers(): AppUser[] {
-    return this.users.filter(user => this.currentMemberIds.includes(user.id));
-  }
-
-  get availableUsers(): AppUser[] {
-    const usedIds = new Set(this.currentMemberIds);
-    return this.users.filter(user => !usedIds.has(user.id));
-  }
-
-  getMembersCount(group: GroupModel): number {
-    return group.memberIds.length;
-  }
-
-  getTicketsCount(group: GroupModel): number {
-    return this.tickets.filter(ticket => ticket.groupId === group.id).length;
-  }
-
-  showNoPermission(action: string): void {
-    this.msg.add({
-      severity: 'warn',
-      summary: 'Sin permiso',
-      detail: `No tienes permiso para ${action}.`
+        this.msg.add({
+          severity: 'error',
+          summary: 'Error',
+          detail: 'No se pudieron cargar los grupos.'
+        });
+      }
     });
   }
 
+  private loadUsers(): void {
+    this.http.get<any>(`${environment.auth}`).subscribe({
+      next: (resp) => {
+        const list = this.extractArray(resp?.data);
+        this.availableUsers = list.map((u: any) => ({
+          id: u.id,
+          username: u.username ?? '',
+          email: u.email ?? '',
+          fullName: u.nombre_completo ?? u.fullName ?? u.username ?? ''
+        }));
+      },
+      error: () => {
+        this.availableUsers = [];
+      }
+    });
+  }
+
+  private extractArray(data: any): any[] {
+    if (Array.isArray(data)) return data;
+    if (Array.isArray(data?.items)) return data.items;
+    if (Array.isArray(data?.groups)) return data.groups;
+    if (Array.isArray(data?.rows)) return data.rows;
+    return [];
+  }
+
+  private mapGroup(g: any): UiGroup {
+    return {
+      id: g.id,
+      name: g.nombre ?? g.name ?? '',
+      level: g.nivel ?? g.level ?? 'Beginner',
+      author: g.autor ?? g.author ?? '',
+      creatorId: g.creador_id ?? g.creatorId ?? '',
+      description: g.descripcion ?? g.description ?? '',
+      members: Array.isArray(g.members) ? g.members : [],
+      ticketsCount: Number(g.ticketsCount ?? g.tickets_count ?? 0)
+    };
+  }
+
+  levelSeverity(level: string): 'success' | 'warn' | 'danger' | 'info' | 'secondary' | 'contrast' {
+    switch (level) {
+      case 'Beginner':
+        return 'success';
+      case 'Intermediate':
+        return 'warn';
+      case 'Advanced':
+        return 'danger';
+      default:
+        return 'info';
+    }
+  }
+
+  getMembersCount(group: UiGroup): number {
+    return group.members?.length ?? 0;
+  }
+
+  getTicketsCount(group: UiGroup): number {
+    return Number(group.ticketsCount ?? 0);
+  }
+
   openNew(): void {
-    if (!this.isLoggedIn || !this.canCreateGroups) {
-      this.showNoPermission('crear grupos');
+    if (!this.canCreateGroups) {
+      this.msg.add({
+        severity: 'warn',
+        summary: 'Sin permiso',
+        detail: 'No tienes permiso para crear grupos.'
+      });
       return;
     }
 
-    this.submitted = false;
     this.editingId = null;
     this.selectedUserId = null;
+    this.currentMembers = [];
+    this.canEditCurrentGroupMembers = false;
 
     this.form.reset({
       level: 'Beginner',
-      author: this.currentUser?.username || this.currentUser?.fullName || '',
+      author: this.currentFullName || this.currentUsername || '',
       name: '',
       description: ''
     });
@@ -357,180 +302,369 @@ export class Group implements OnInit, OnDestroy {
     this.dialogVisible = true;
   }
 
-  editGroup(g: GroupModel): void {
-    if (!this.canEditGroupPermission(g)) {
-      this.showNoPermission('editar este grupo');
+  editGroup(group: UiGroup): void {
+    if (!this.canEditGroupPermission(group)) {
+      this.msg.add({
+        severity: 'warn',
+        summary: 'Sin permiso',
+        detail: 'No tienes permiso para editar este grupo.'
+      });
       return;
     }
 
-    this.submitted = false;
-    this.editingId = g.id;
+    this.editingId = group.id;
     this.selectedUserId = null;
 
-    this.form.setValue({
-      level: g.level,
-      author: g.author,
-      name: g.name,
-      description: g.description
+    this.form.patchValue({
+      level: group.level,
+      author: group.author,
+      name: group.name,
+      description: group.description
     });
 
+    this.currentMembers = (group.members ?? []).map((m) => ({
+      id: m.id,
+      username: m.username,
+      email: m.email,
+      fullName: m.nombre_completo
+    }));
+
+    this.canEditCurrentGroupMembers = this.canManageMembers(group);
     this.dialogVisible = true;
   }
 
-  addMember(): void {
-    if (!this.canAddMembersPermission(this.editingGroup)) {
-      this.showNoPermission('agregar usuarios a este grupo');
-      return;
-    }
-
-    if (this.editingId === null || this.selectedUserId === null) return;
-
-    const userId = this.selectedUserId;
-
-    this.groups = this.groups.map(group => {
-      if (group.id !== this.editingId) return group;
-      if (group.memberIds.includes(userId)) return group;
-
-      return {
-        ...group,
-        memberIds: [...group.memberIds, userId]
-      };
-    });
-
-    this.saveGroups();
-    this.selectedUserId = null;
-
-    this.msg.add({
-      severity: 'success',
-      summary: 'Agregado',
-      detail: 'Usuario agregado al grupo.'
-    });
-  }
-
-  removeMember(userId: number): void {
-    if (!this.canRemoveMembersPermission(this.editingGroup)) {
-      this.showNoPermission('eliminar usuarios de este grupo');
-      return;
-    }
-
-    if (this.editingId === null) return;
-
-    this.groups = this.groups.map(group => {
-      if (group.id !== this.editingId) return group;
-
-      return {
-        ...group,
-        memberIds: group.memberIds.filter(id => id !== userId)
-      };
-    });
-
-    this.saveGroups();
-
-    this.msg.add({
-      severity: 'warn',
-      summary: 'Eliminado',
-      detail: 'Miembro eliminado del grupo.'
-    });
-  }
-
   save(): void {
-    this.submitted = true;
+    this.form.markAllAsTouched();
 
     if (this.form.invalid) {
       this.msg.add({
-        severity: 'error',
-        summary: 'Error',
-        detail: 'Completa el formulario correctamente.'
+        severity: 'warn',
+        summary: 'Formulario inválido',
+        detail: 'Completa todos los campos correctamente.'
       });
       return;
     }
 
-    const v = this.form.getRawValue();
+    const value = this.form.getRawValue();
 
     if (this.editingId === null) {
-      if (!this.isLoggedIn || !this.canCreateGroups) {
-        this.showNoPermission('crear grupos');
+      if (!this.canCreateGroups) {
+        this.msg.add({
+          severity: 'warn',
+          summary: 'Sin permiso',
+          detail: 'No tienes permiso para crear grupos.'
+        });
         return;
       }
 
-      const newId = this.groups.length ? Math.max(...this.groups.map(x => x.id)) + 1 : 1;
-      const creatorId = this.currentUser?.id ? [this.currentUser.id] : [];
-
-      const created: GroupModel = {
-        id: newId,
-        level: v.level,
-        author: this.currentUser?.username || this.currentUser?.fullName || v.author,
-        name: v.name,
-        description: v.description,
-        memberIds: creatorId
-      };
-
-      this.groups = [created, ...this.groups];
-
-      this.msg.add({
-        severity: 'success',
-        summary: 'Creado',
-        detail: 'Group creado.'
-      });
-    } else {
-      const targetGroup = this.groups.find(g => g.id === this.editingId);
-
-      if (!this.canEditGroupPermission(targetGroup)) {
-        this.showNoPermission('editar este grupo');
+      if (!this.currentUserId) {
+        this.msg.add({
+          severity: 'error',
+          summary: 'Error',
+          detail: 'No se encontró el usuario actual.'
+        });
         return;
       }
 
-      this.groups = this.groups.map(g =>
-        g.id === this.editingId
-          ? {
-              ...g,
-              level: v.level,
-              author: g.author,
-              name: v.name,
-              description: v.description
-            }
-          : g
-      );
-
-      this.msg.add({
-        severity: 'success',
-        summary: 'Actualizado',
-        detail: 'Group actualizado.'
+      this.groupService.create({
+        nivel: value.level,
+        creador_id: this.currentUserId,
+        nombre: value.name,
+        descripcion: value.description
+      }).subscribe({
+        next: () => {
+          this.msg.add({
+            severity: 'success',
+            summary: 'Correcto',
+            detail: 'Grupo creado correctamente.'
+          });
+          this.dialogVisible = false;
+          this.loadGroups();
+        },
+        error: () => {
+          this.msg.add({
+            severity: 'error',
+            summary: 'Error',
+            detail: 'No se pudo crear el grupo.'
+          });
+        }
       });
+
+      return;
     }
 
-    this.saveGroups();
-    this.dialogVisible = false;
+    const group = this.groups.find(g => g.id === this.editingId);
+    if (!group) return;
+
+    if (!this.canEditGroupPermission(group)) {
+      this.msg.add({
+        severity: 'warn',
+        summary: 'Sin permiso',
+        detail: 'No tienes permiso para editar este grupo.'
+      });
+      return;
+    }
+
+    this.groupService.update(this.editingId, {
+      nivel: value.level,
+      nombre: value.name,
+      descripcion: value.description
+    }).subscribe({
+      next: () => {
+        this.msg.add({
+          severity: 'success',
+          summary: 'Correcto',
+          detail: 'Grupo actualizado correctamente.'
+        });
+        this.dialogVisible = false;
+        this.loadGroups();
+      },
+      error: () => {
+        this.msg.add({
+          severity: 'error',
+          summary: 'Error',
+          detail: 'No se pudo actualizar el grupo.'
+        });
+      }
+    });
   }
 
-  deleteGroup(g: GroupModel): void {
-    if (!this.canDeleteGroupPermission(g)) {
-      this.showNoPermission('eliminar este grupo');
+  deleteGroup(group: UiGroup): void {
+    if (!this.canDeleteGroupPermission(group)) {
+      this.msg.add({
+        severity: 'warn',
+        summary: 'Sin permiso',
+        detail: 'No tienes permiso para borrar este grupo.'
+      });
       return;
     }
 
     this.confirm.confirm({
       header: 'Confirmar',
-      message: `¿Eliminar el group "${g.name}"?`,
+      message: `¿Seguro que deseas eliminar el grupo "${group.name}"?`,
       icon: 'pi pi-exclamation-triangle',
-      acceptLabel: 'Sí, eliminar',
+      acceptLabel: 'Sí, borrar',
       rejectLabel: 'Cancelar',
       accept: () => {
-        this.groups = this.groups.filter(x => x.id !== g.id);
-        this.saveGroups();
+        this.groupService.delete(group.id).subscribe({
+          next: () => {
+            this.msg.add({
+              severity: 'success',
+              summary: 'Correcto',
+              detail: 'Grupo eliminado correctamente.'
+            });
+            this.loadGroups();
+          },
+          error: () => {
+            this.msg.add({
+              severity: 'error',
+              summary: 'Error',
+              detail: 'No se pudo eliminar el grupo.'
+            });
+          }
+        });
+      }
+    });
+  }
 
+  addMember(): void {
+    if (!this.editingId || !this.selectedUserId) return;
+
+    const group = this.groups.find(g => g.id === this.editingId);
+    if (!group || !this.canAddMembers(group)) {
+  this.msg.add({
+    severity: 'warn',
+    summary: 'Sin permiso',
+    detail: 'No tienes permiso para agregar miembros a este grupo.'
+  });
+  return;
+}
+
+    this.groupService.addMember(this.editingId, this.selectedUserId).subscribe({
+      next: () => {
         this.msg.add({
-          severity: 'warn',
-          summary: 'Eliminado',
-          detail: 'Group eliminado.'
+          severity: 'success',
+          summary: 'Correcto',
+          detail: 'Miembro agregado correctamente.'
+        });
+        this.selectedUserId = null;
+        this.reloadGroupsKeepingDialog();
+      },
+      error: (err) => {
+  console.error('ERROR ADD MEMBER:', err);
+
+  this.msg.add({
+    severity: 'error',
+    summary: 'Error',
+    detail: err?.error?.message || 'No se pudo agregar el miembro.'
+  });
+}
+    });
+  }
+
+  removeMember(userId: string): void {
+    if (!this.editingId) return;
+
+    const group = this.groups.find(g => g.id === this.editingId);
+    if (!group || !this.canRemoveMembers(group)) {
+  this.msg.add({
+    severity: 'warn',
+    summary: 'Sin permiso',
+    detail: 'No tienes permiso para quitar miembros de este grupo.'
+  });
+  return;
+}
+
+    this.groupService.removeMember(this.editingId, userId).subscribe({
+      next: () => {
+        this.msg.add({
+          severity: 'success',
+          summary: 'Correcto',
+          detail: 'Miembro removido correctamente.'
+        });
+        this.reloadGroupsKeepingDialog();
+      },
+      error: (err) => {
+  console.error('ERROR REMOVE MEMBER:', err);
+
+  this.msg.add({
+    severity: 'error',
+    summary: 'Error',
+    detail: err?.error?.message || 'No se pudo remover el miembro.'
+  });
+}
+    });
+  }
+
+  private reloadGroupsKeepingDialog(): void {
+    const editingId = this.editingId;
+
+    this.groupService.getAll().subscribe({
+      next: (resp) => {
+        const list = this.extractArray(resp?.data);
+        this.groups = list.map((g: any) => this.mapGroup(g));
+        this.visibleGroups = [...this.groups];
+        this.total = this.groups.length;
+
+        if (editingId) {
+          const updated = this.groups.find(g => g.id === editingId);
+          if (updated) {
+            this.currentMembers = (updated.members ?? []).map((m) => ({
+              id: m.id,
+              username: m.username,
+              email: m.email,
+              fullName: m.nombre_completo
+            }));
+            this.canEditCurrentGroupMembers = this.canManageMembers(updated);
+          }
+        }
+      },
+      error: () => {
+        this.msg.add({
+          severity: 'error',
+          summary: 'Error',
+          detail: 'No se pudieron refrescar los grupos.'
         });
       }
     });
   }
 
   onDialogHide(): void {
-    this.submitted = false;
+    this.form.reset({
+      level: 'Beginner',
+      author: this.currentFullName || this.currentUsername || '',
+      name: '',
+      description: ''
+    });
+
     this.editingId = null;
     this.selectedUserId = null;
+    this.currentMembers = [];
+    this.canEditCurrentGroupMembers = false;
+  }
+
+  isInvalid(controlName: string): boolean {
+    const control = this.form.get(controlName);
+    return !!control && control.invalid && (control.touched || control.dirty);
+  }
+
+  canEditGroupPermission(group: UiGroup): boolean {
+    if (this.hasAnyPermission(['group:edit', 'group:update', 'group:manage'])) {
+      return true;
+    }
+
+    if (this.currentUserId && group.creatorId === this.currentUserId) {
+      return true;
+    }
+
+    return this.hasGroupScopedPermission(group.id, [
+      'group:edit',
+      'group:update',
+      'group:manage'
+    ]);
+  }
+
+  canDeleteGroupPermission(group: UiGroup): boolean {
+    if (this.hasAnyPermission(['group:delete', 'group:manage'])) {
+      return true;
+    }
+
+    if (this.currentUserId && group.creatorId === this.currentUserId) {
+      return true;
+    }
+
+    return this.hasGroupScopedPermission(group.id, [
+      'group:delete',
+      'group:manage'
+    ]);
+  }
+
+  private canAddMembers(group: UiGroup): boolean {
+  if (this.hasAnyPermission(['group:members:add', 'group:manage'])) {
+    return true;
+  }
+
+  if (this.currentUserId && group.creatorId === this.currentUserId) {
+    return true;
+  }
+
+  return this.hasGroupScopedPermission(group.id, [
+    'group:members:add',
+    'group:manage'
+  ]);
+}
+
+private canRemoveMembers(group: UiGroup): boolean {
+  if (this.hasAnyPermission(['group:members:remove', 'group:manage'])) {
+    return true;
+  }
+
+  if (this.currentUserId && group.creatorId === this.currentUserId) {
+    return true;
+  }
+
+  return this.hasGroupScopedPermission(group.id, [
+    'group:members:remove',
+    'group:manage'
+  ]);
+}
+
+  private canManageMembers(group: UiGroup): boolean {
+  return this.canAddMembers(group) || this.canRemoveMembers(group);
+}
+
+  private hasAnyPermission(expected: string[]): boolean {
+    const all = [...this.permissions, ...this.globalPermissions];
+    return expected.some(permission => all.includes(permission));
+  }
+
+  private hasGroupScopedPermission(groupId: string, expected: string[]): boolean {
+    if (!this.groupPermissionsRaw?.length) return false;
+
+    return this.groupPermissionsRaw.some(item => {
+      const id = item.grupo_id ?? item.groupId;
+      const perms = item.permissions ?? [];
+      return id === groupId && expected.some(permission => perms.includes(permission));
+    });
   }
 }

@@ -9,10 +9,42 @@ import { MessageModule } from 'primeng/message';
 
 import { MessageService } from 'primeng/api';
 import { CommonModule } from '@angular/common';
-import { AppUser } from '../../models/user.model';
+import { UserService } from '../../services/user.service';
+import { PermissionService } from '../../services/permission.service';
+import { ToastModule } from 'primeng/toast';
 
-const USERS_KEY = 'arp_users';
 const CURRENT_USER_KEY = 'arp_current_user';
+const CURRENT_PERMISSIONS_KEY = 'arp_current_permissions';
+const GLOBAL_PERMISSIONS_KEY = 'arp_global_permissions';
+const GROUP_PERMISSIONS_KEY = 'arp_group_permissions';
+const TOKEN_KEY = 'arp_token';
+const IS_LOGGED_IN_KEY = 'isLoggedIn';
+
+interface LoginResponse {
+  statusCode: number;
+  intOpCode?: string;
+  message?: string;
+  data: Array<{
+    message?: string;
+    token: string;
+    user: {
+      id: string;
+      username?: string;
+      email: string;
+      nombre_completo?: string;
+      fullName?: string;
+      is_admin?: boolean;
+    };
+    permissions?: string[];
+    globalPermissions?: string[];
+    groupPermissions?: Array<{
+      grupo_id?: string;
+      group_id?: string;
+      groupId?: string;
+      permissions: string[];
+    }>;
+  }>;
+}
 
 @Component({
   selector: 'app-login',
@@ -24,158 +56,37 @@ const CURRENT_USER_KEY = 'arp_current_user';
     PasswordModule,
     ButtonModule,
     MessageModule,
-    CommonModule
+    CommonModule,
+    ToastModule
   ],
+  providers: [MessageService],
   templateUrl: './login.html',
   styleUrl: './login.scss'
 })
 export class Login {
   submitted = false;
+  loading = false;
   form!: FormGroup;
 
   constructor(
     private fb: FormBuilder,
     private msg: MessageService,
-    private router: Router
+    private router: Router,
+    private userService: UserService,
+    private permissionService: PermissionService
   ) {
     this.form = this.fb.group({
       email: ['', [Validators.required, Validators.email]],
       password: ['', [Validators.required]]
     });
-
-    this.ensureUsersExist();
   }
 
-  isInvalid(name: string) {
+  isInvalid(name: string): boolean {
     const c = this.form.get(name);
     return !!c && c.invalid && (c.touched || this.submitted);
   }
 
-private ensureUsersExist() {
-    const raw = localStorage.getItem(USERS_KEY);
-  if (raw) return;
-  const demoUsers: AppUser[] = [
-    {
-      id: 1,
-      username: 'aldo',
-      email: 'aldo@gmail.com',
-      fullName: 'Aldo Jair Garcia Pacheco',
-      password: '12345',
-      address: 'Avenida de la Luz',
-      phone: '4423936181',
-      birthDate: '2005-01-29',
-      permissions: {
-        canCreateGroup: true,
-        canEditGroup: true,
-        canDeleteGroup: true,
-        canAddMembers: true,
-        canRemoveMembers: true,
-        canCreateTickets: true,
-        canEditTickets: true,
-        canViewTicketDetail: true,
-          canManageGroups: true,
-  canManageUsers: true
-
-      }
-    },
-    {
-      id: 2,
-      username: 'santiago',
-      email: 'santiago@gmail.com',
-      fullName: 'Santiago Perez',
-      password: '12345',
-      address: 'Colonia Centro',
-      phone: '4421112233',
-      birthDate: '2004-08-14',
-      permissions: {
-        canCreateGroup: false,
-        canEditGroup: false,
-        canDeleteGroup: false,
-        canAddMembers: false,
-        canRemoveMembers: false,
-        canCreateTickets: true,
-        canEditTickets: false,
-        canViewTicketDetail: true,
-                  canManageGroups: false,
-  canManageUsers: false
-      }
-    },
-    {
-      id: 3,
-      username: 'fernanda',
-      email: 'fernanda@gmail.com',
-      fullName: 'Fernanda Lopez',
-      password: '12345',
-      address: 'Juriquilla',
-      phone: '4425556677',
-      birthDate: '2003-11-02',
-      permissions: {
-        canCreateGroup: true,
-        canEditGroup: true,
-        canDeleteGroup: false,
-        canAddMembers: true,
-        canRemoveMembers: true,
-        canCreateTickets: true,
-        canEditTickets: true,
-        canViewTicketDetail: true,
-                          canManageGroups: false,
-  canManageUsers: false
-      }
-    },
-    {
-      id: 4,
-      username: 'luis',
-      email: 'luis@gmail.com',
-      fullName: 'Luis Ramirez',
-      password: '12345',
-      address: 'El Pueblito',
-      phone: '4428889999',
-      birthDate: '2002-06-21',
-      permissions: {
-        canCreateGroup: false,
-        canEditGroup: false,
-        canDeleteGroup: false,
-        canAddMembers: false,
-        canRemoveMembers: false,
-        canCreateTickets: true,
-        canEditTickets: false,
-        canViewTicketDetail: true,
-                          canManageGroups: false,
-  canManageUsers: false
-      }
-    }
-  ];
-
-  localStorage.setItem(USERS_KEY, JSON.stringify(demoUsers));
-
-  const rawCurrent = localStorage.getItem(CURRENT_USER_KEY);
-
-  if (rawCurrent) {
-    try {
-      const current = JSON.parse(rawCurrent) as AppUser;
-      const updatedCurrent = demoUsers.find(u => u.id === current.id);
-
-      if (updatedCurrent) {
-        localStorage.setItem(CURRENT_USER_KEY, JSON.stringify(updatedCurrent));
-      }
-    } catch {
-      // nada
-    }
-  }
-}
-  private getUsers(): AppUser[] {
-    const raw = localStorage.getItem(USERS_KEY);
-
-    if (!raw) return [];
-
-    try {
-      return JSON.parse(raw) as AppUser[];
-    } catch {
-      return [];
-    }
-  }
-
-  login() {
+  login(): void {
     this.submitted = true;
 
     if (this.form.invalid) {
@@ -190,32 +101,65 @@ private ensureUsersExist() {
     const email = this.form.value.email!;
     const password = this.form.value.password!;
 
-    const users = this.getUsers();
+    this.loading = true;
 
-    const userValid = users.find(
-      u => u.email === email && u.password === password
-    );
+    this.userService.login(email, password).subscribe({
+  next: (response: LoginResponse) => {
+    this.loading = false;
 
-    if (userValid) {
-      localStorage.setItem('isLoggedIn', 'true');
-      localStorage.setItem(CURRENT_USER_KEY, JSON.stringify(userValid));
+    const data = response.data?.[0];
 
-      this.msg.add({
-        severity: 'success',
-        summary: 'Login correcto',
-        detail: 'Bienvenido'
-      });
-
-      this.router.navigateByUrl('/home');
-    } else {
-      localStorage.removeItem('isLoggedIn');
-      localStorage.removeItem(CURRENT_USER_KEY);
-
+    if (!data) {
       this.msg.add({
         severity: 'error',
-        summary: 'Credenciales inválidas',
-        detail: 'Correo o contraseña incorrectos.'
+        summary: 'Error',
+        detail: 'La respuesta del servidor no contiene datos válidos.'
       });
+      return;
     }
+
+    localStorage.setItem(IS_LOGGED_IN_KEY, 'true');
+    localStorage.setItem(TOKEN_KEY, data.token);
+    localStorage.setItem(CURRENT_USER_KEY, JSON.stringify(data.user));
+
+    const permissions = data.permissions ?? data.globalPermissions ?? [];
+
+    localStorage.setItem(CURRENT_PERMISSIONS_KEY, JSON.stringify(permissions));
+    localStorage.setItem(GLOBAL_PERMISSIONS_KEY, JSON.stringify(data.globalPermissions || []));
+    localStorage.setItem(GROUP_PERMISSIONS_KEY, JSON.stringify(data.groupPermissions || []));
+
+    this.permissionService.reloadPermissions();
+    this.permissionService.clearGroupPermissions();
+
+    this.msg.add({
+      severity: 'success',
+      summary: 'Bienvenido',
+      detail: data.message || response.message || 'Has iniciado sesión correctamente.'
+    });
+
+    setTimeout(() => {
+      this.router.navigateByUrl('/home');
+    }, 1000);
+  },
+  error: (err) => {
+    this.loading = false;
+
+    localStorage.removeItem(IS_LOGGED_IN_KEY);
+    localStorage.removeItem(TOKEN_KEY);
+    localStorage.removeItem(CURRENT_USER_KEY);
+    localStorage.removeItem(CURRENT_PERMISSIONS_KEY);
+    localStorage.removeItem(GLOBAL_PERMISSIONS_KEY);
+    localStorage.removeItem(GROUP_PERMISSIONS_KEY);
+
+    this.permissionService.reloadPermissions();
+    this.permissionService.clearGroupPermissions();
+
+    this.msg.add({
+      severity: 'error',
+      summary: 'Credenciales inválidas',
+      detail: err?.error?.message || 'Correo o contraseña incorrectos.'
+    });
+  }
+});
   }
 }

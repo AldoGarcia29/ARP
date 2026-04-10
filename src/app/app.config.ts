@@ -8,19 +8,21 @@ import Aura from '@primeuix/themes/aura';
 import { MessageService } from 'primeng/api';
 
 import { routes } from './app.routes';
+import { provideHttpClient, withInterceptors } from '@angular/common/http';
+import { authInterceptor } from './interceptors/auth-interceptor';
 
 export const appConfig: ApplicationConfig = {
   providers: [
     provideRouter(routes),
 
-    // PrimeNG setup (theme + animations)
+    provideHttpClient(withInterceptors([authInterceptor])),
+
     provideAnimationsAsync(),
     providePrimeNG({
       theme: { preset: Aura },
       ripple: true,
     }),
 
-    // Toast service
     MessageService,
   ],
 };

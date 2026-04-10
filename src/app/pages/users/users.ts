@@ -1,6 +1,7 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnInit, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormBuilder, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
+import { HttpClient } from '@angular/common/http';
 
 import { CardModule } from 'primeng/card';
 import { DividerModule } from 'primeng/divider';
@@ -10,24 +11,35 @@ import { PasswordModule } from 'primeng/password';
 import { MessageModule } from 'primeng/message';
 import { ToastModule } from 'primeng/toast';
 import { MessageService } from 'primeng/api';
-import { AppUser } from '../../models/user.model';
+
+import { UserService } from '../../services/user.service';
+import { environment } from '../../../environments/environment';
 
 type Ticket = {
-  id: number;
+  id: string;
   title: string;
   description: string;
-  status: 'Pendiente' | 'En progreso' | 'Revisión' | 'Finalizado';
+  status: 'Pendiente' | 'En progreso' | 'Revisión' | 'Finalizado' | 'Cancelado';
   assignedTo: string;
-  priority: 'Baja' | 'Media' | 'Alta';
+  assignedUserId: string | null;
+  priority: 'Baja' | 'Media' | 'Alta' | 'Crítica';
   createdAt: string;
   dueDate: string;
   comments: string[];
-  groupId: number;
+  groupId: string;
 };
 
-const USERS_KEY = 'arp_users';
+type ProfileUser = {
+  id: string;
+  username: string;
+  email: string;
+  fullName: string;
+  address: string;
+  phone: string;
+  birthDate: string;
+};
+
 const CURRENT_USER_KEY = 'arp_current_user';
-const TICKETS_KEY = 'arp_tickets';
 
 @Component({
   selector: 'app-users-page',
@@ -48,126 +60,159 @@ const TICKETS_KEY = 'arp_tickets';
   styleUrls: ['./users.scss'],
 })
 export class Users implements OnInit {
+  private fb = inject(FormBuilder);
+  private msg = inject(MessageService);
+  private userService = inject(UserService);
+  private http = inject(HttpClient);
+
   submitted = false;
   editing = false;
+  loading = false;
+  loadingTickets = false;
 
-  users: AppUser[] = [];
-  currentUser: AppUser | null = null;
+  currentUser: ProfileUser | null = null;
+  currentUserId: string | null = null;
   tickets: Ticket[] = [];
 
-  profile: AppUser = {
-    id: 0,
-    username: '',
-    email: '',
-    fullName: '',
-    password: '',
-    address: '',
-    phone: '',
-    birthDate: '',
-    permissions: {
-      canCreateGroup: false,
-      canEditGroup: false,
-      canDeleteGroup: false,
-      canAddMembers: false,
-      canRemoveMembers: false,
-      canCreateTickets: false,
-      canEditTickets: false,
-      canViewTicketDetail: true,
-                                canManageGroups: false,
-  canManageUsers: false
-    }
-  };
-
-  form!: FormGroup;
-
-  constructor(
-    private fb: FormBuilder,
-    private msg: MessageService
-  ) {
-    this.form = this.fb.group({
-      username: ['', Validators.required],
-      email: ['', [Validators.required, Validators.email]],
-      password: ['', Validators.required],
-      fullName: ['', Validators.required],
-      address: ['', Validators.required],
-      phone: ['', [Validators.required, Validators.pattern(/^\d+$/)]],
-      birthDate: ['', Validators.required],
-    });
-  }
+  form: FormGroup = this.fb.group({
+    username: ['', Validators.required],
+    email: ['', [Validators.required, Validators.email]],
+    password: [''],
+    fullName: ['', Validators.required],
+    address: ['', Validators.required],
+    phone: ['', [Validators.required, Validators.pattern(/^\d+$/)]],
+    birthDate: ['', Validators.required],
+  });
 
   ngOnInit(): void {
-    this.loadUsers();
-    this.loadCurrentUser();
-    this.loadTickets();
+    this.loadCurrentUserId();
 
-    if (this.currentUser) {
-      const fullUser = this.users.find(u => u.id === this.currentUser!.id);
-
-      if (fullUser) {
-        this.currentUser = { ...fullUser };
-        localStorage.setItem(CURRENT_USER_KEY, JSON.stringify(this.currentUser));
-      }
-
-      this.profile = { ...this.currentUser };
-      this.form.patchValue(this.profile);
+    if (this.currentUserId) {
+      this.loadProfileFromApi();
     }
 
+    this.loadTickets();
     this.form.disable();
   }
 
-  private loadUsers(): void {
-    const raw = localStorage.getItem(USERS_KEY);
+  private loadCurrentUserId(): void {
+    const raw = localStorage.getItem(CURRENT_USER_KEY);
+
     if (!raw) {
-      this.users = [];
+      this.currentUserId = null;
       return;
     }
 
     try {
-      this.users = JSON.parse(raw) as AppUser[];
+      const parsed = JSON.parse(raw);
+      this.currentUserId =
+        parsed?.id ??
+        parsed?.user?.id ??
+        null;
     } catch {
-      this.users = [];
+      this.currentUserId = null;
     }
   }
 
-  private loadCurrentUser(): void {
-    const raw = localStorage.getItem(CURRENT_USER_KEY);
-    if (!raw) {
-      this.currentUser = null;
-      return;
-    }
+  private loadProfileFromApi(): void {
+    if (!this.currentUserId) return;
 
-    try {
-      this.currentUser = JSON.parse(raw) as AppUser;
-    } catch {
-      this.currentUser = null;
-    }
+    this.loading = true;
+
+    this.userService.getById(this.currentUserId).subscribe({
+      next: (response) => {
+        this.loading = false;
+
+        const user = response.data;
+
+        this.currentUser = {
+          id: String(user.id),
+          username: user.username ?? '',
+          email: user.email ?? '',
+          fullName: user.nombre_completo ?? user.fullName ?? '',
+          address: user.direccion ?? '',
+          phone: user.telefono ?? '',
+          birthDate: user.fecha_nac ? String(user.fecha_nac).substring(0, 10) : ''
+        };
+
+        this.form.patchValue({
+          username: this.currentUser.username,
+          email: this.currentUser.email,
+          password: '',
+          fullName: this.currentUser.fullName,
+          address: this.currentUser.address,
+          phone: this.currentUser.phone,
+          birthDate: this.currentUser.birthDate
+        });
+
+        const currentSessionRaw = localStorage.getItem(CURRENT_USER_KEY);
+        if (currentSessionRaw) {
+          try {
+            const sessionUser = JSON.parse(currentSessionRaw);
+            sessionUser.id = this.currentUser.id;
+            sessionUser.username = this.currentUser.username;
+            sessionUser.email = this.currentUser.email;
+            sessionUser.nombre_completo = this.currentUser.fullName;
+            localStorage.setItem(CURRENT_USER_KEY, JSON.stringify(sessionUser));
+          } catch {}
+        }
+      },
+      error: (err) => {
+        console.error('Error al cargar perfil:', err);
+        this.loading = false;
+        this.currentUser = null;
+
+        this.msg.add({
+          severity: 'error',
+          summary: 'Error',
+          detail: err?.error?.message || 'No se pudo cargar el perfil.'
+        });
+      }
+    });
   }
 
   private loadTickets(): void {
-    const raw = localStorage.getItem(TICKETS_KEY);
-    if (!raw) {
-      this.tickets = [];
-      return;
-    }
+    this.loadingTickets = true;
 
-    try {
-      this.tickets = JSON.parse(raw) as Ticket[];
-    } catch {
-      this.tickets = [];
-    }
+    this.http.get<any>(environment.tickets).subscribe({
+      next: (resp) => {
+        console.log('PROFILE TICKETS BACKEND:', resp);
+
+        const list = Array.isArray(resp?.data) ? resp.data : [];
+
+        this.tickets = list.map((t: any) => ({
+          id: String(t.id),
+          title: t.titulo ?? t.title ?? '',
+          description: t.descripcion ?? t.description ?? '',
+          status: t.estado_nombre ?? t.status ?? 'Pendiente',
+          assignedTo:
+            t.asignado_nombre_completo ??
+            t.asignado_username ??
+            t.assignedTo ??
+            '',
+          assignedUserId: t.asignado_id ? String(t.asignado_id) : null,
+          priority: t.prioridad_nombre ?? t.priority ?? 'Media',
+          createdAt: t.creado_en ?? t.createdAt ?? '',
+          dueDate: t.fecha_limite ?? t.dueDate ?? '',
+          comments: Array.isArray(t.comments) ? t.comments : [],
+          groupId: String(t.grupo_id ?? t.group_id ?? t.groupId ?? '')
+        }));
+
+        this.loadingTickets = false;
+      },
+      error: (err) => {
+        console.error('Error al cargar tickets del perfil:', err);
+        this.tickets = [];
+        this.loadingTickets = false;
+      }
+    });
   }
 
   get assignedTickets(): Ticket[] {
     if (!this.currentUser) return [];
 
-    const currentNames = [
-      this.currentUser.username?.trim().toLowerCase(),
-      this.currentUser.fullName?.split(' ')[0]?.trim().toLowerCase(),
-      this.currentUser.fullName?.trim().toLowerCase()
-    ].filter(Boolean);
-
     return this.tickets.filter(ticket =>
-      currentNames.includes(ticket.assignedTo.trim().toLowerCase())
+      ticket.assignedUserId === this.currentUser!.id
     );
   }
 
@@ -200,14 +245,26 @@ export class Users implements OnInit {
   cancelEdit(): void {
     this.editing = false;
     this.submitted = false;
-    this.form.patchValue(this.profile);
+
+    if (this.currentUser) {
+      this.form.patchValue({
+        username: this.currentUser.username,
+        email: this.currentUser.email,
+        password: '',
+        fullName: this.currentUser.fullName,
+        address: this.currentUser.address,
+        phone: this.currentUser.phone,
+        birthDate: this.currentUser.birthDate
+      });
+    }
+
     this.form.disable();
   }
 
   saveChanges(): void {
     this.submitted = true;
 
-    if (this.form.invalid || !this.currentUser) {
+    if (this.form.invalid || !this.currentUserId) {
       this.msg.add({
         severity: 'error',
         summary: 'Error',
@@ -216,74 +273,118 @@ export class Users implements OnInit {
       return;
     }
 
-    const updatedForm = this.form.getRawValue();
+    const formValue = this.form.getRawValue();
 
-    const updatedProfile: AppUser = {
-      ...this.currentUser,
-      ...updatedForm
+    const payload = {
+      username: formValue.username,
+      email: formValue.email,
+      nombre_completo: formValue.fullName,
+      direccion: formValue.address,
+      telefono: formValue.phone,
+      fecha_nac: formValue.birthDate,
+      password: formValue.password?.trim() ? formValue.password : undefined
     };
 
-    this.users = this.users.map(user =>
-      user.id === updatedProfile.id ? updatedProfile : user
-    );
+    this.userService.updateProfile(this.currentUserId, payload).subscribe({
+      next: (response) => {
+        const updated = response.data;
 
-    localStorage.setItem(USERS_KEY, JSON.stringify(this.users));
-    localStorage.setItem(CURRENT_USER_KEY, JSON.stringify(updatedProfile));
+        this.currentUser = {
+          id: String(updated.id),
+          username: updated.username,
+          email: updated.email,
+          fullName: updated.nombre_completo,
+          address: updated.direccion,
+          phone: updated.telefono,
+          birthDate: updated.fecha_nac ? String(updated.fecha_nac).substring(0, 10) : ''
+        };
 
-    this.currentUser = updatedProfile;
-    this.profile = updatedProfile;
+        const currentSessionRaw = localStorage.getItem(CURRENT_USER_KEY);
+        if (currentSessionRaw) {
+          try {
+            const sessionUser = JSON.parse(currentSessionRaw);
+            sessionUser.id = this.currentUser.id;
+            sessionUser.username = this.currentUser.username;
+            sessionUser.email = this.currentUser.email;
+            sessionUser.nombre_completo = this.currentUser.fullName;
+            localStorage.setItem(CURRENT_USER_KEY, JSON.stringify(sessionUser));
+          } catch {}
+        }
 
-    this.msg.add({
-      severity: 'success',
-      summary: 'Guardado',
-      detail: 'Perfil actualizado.',
+        this.form.patchValue({
+          username: this.currentUser.username,
+          email: this.currentUser.email,
+          password: '',
+          fullName: this.currentUser.fullName,
+          address: this.currentUser.address,
+          phone: this.currentUser.phone,
+          birthDate: this.currentUser.birthDate
+        });
+
+        this.msg.add({
+          severity: 'success',
+          summary: 'Guardado',
+          detail: 'Perfil actualizado correctamente.',
+        });
+
+        this.editing = false;
+        this.form.disable();
+      },
+      error: (err) => {
+        console.error('Error al actualizar perfil:', err);
+        this.msg.add({
+          severity: 'error',
+          summary: 'Error',
+          detail: err?.error?.message || 'No se pudo actualizar el perfil.'
+        });
+      }
     });
-
-    this.editing = false;
-    this.form.disable();
   }
 
   deleteProfile(): void {
-    if (!this.currentUser) return;
-
-    this.users = this.users.filter(user => user.id !== this.currentUser!.id);
-    localStorage.setItem(USERS_KEY, JSON.stringify(this.users));
-    localStorage.removeItem(CURRENT_USER_KEY);
-
-    this.currentUser = null;
-    this.profile = {
-      id: 0,
-      username: '',
-      email: '',
-      fullName: '',
-      password: '',
-      address: '',
-      phone: '',
-      birthDate: '',
-      permissions: {
-        canCreateGroup: false,
-        canEditGroup: false,
-        canDeleteGroup: false,
-        canAddMembers: false,
-        canRemoveMembers: false,
-        canCreateTickets: false,
-        canEditTickets: false,
-        canViewTicketDetail: true,
-                                  canManageGroups: false,
-  canManageUsers: false
-      }
-    };
-
-    this.form.reset(this.profile);
-    this.form.disable();
-    this.editing = false;
-
+  if (!this.currentUserId) {
     this.msg.add({
-      severity: 'warn',
-      summary: 'Eliminado',
-      detail: 'Perfil eliminado.',
+      severity: 'error',
+      summary: 'Error',
+      detail: 'No se encontró el usuario actual.'
     });
+    return;
   }
+
+  const confirmed = confirm('¿Seguro que deseas eliminar tu perfil? Esta acción no se puede deshacer.');
+
+  if (!confirmed) {
+    return;
+  }
+
+  this.userService.deleteUser(this.currentUserId).subscribe({
+    next: () => {
+      localStorage.removeItem('arp_current_user');
+      localStorage.removeItem('arp_global_permissions');
+      localStorage.removeItem('arp_group_permissions');
+      localStorage.removeItem('arp_current_permissions');
+      localStorage.removeItem('token');
+
+      this.msg.add({
+        severity: 'success',
+        summary: 'Eliminado',
+        detail: 'Tu perfil fue eliminado correctamente.'
+      });
+
+      setTimeout(() => {
+        window.location.href = '/login';
+      }, 800);
+    },
+    error: (err) => {
+      console.error('Error al eliminar perfil:', err);
+      this.msg.add({
+        severity: 'error',
+        summary: 'Error',
+        detail: err?.error?.message || 'No se pudo eliminar el perfil.'
+      });
+    }
+  });
+}
 
   isInvalid(name: string): boolean {
     const c = this.form.get(name);
